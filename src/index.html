@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stellar Blade Mod Manager</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="container">
+    <aside id="sidebar">
+      <h1>🚀 Stellar Blade</h1>
+      <ul id="menu">
+        <li data-tab="home" class="active">🏡 Home</li>
+        <li data-tab="nexus">💠 Nexus</li>
+        <li data-tab="mods">🗂️ Mods</li>
+        <li data-tab="ayaka">💠 Ayaka</li>
+        <li data-tab="settings">⚙️ Paramètres</li>
+      </ul>
+    </aside>
+    <main id="main-content">
+      <section id="tab-home" class="tab active">
+        <h2>🏡 Accueil – Derniers Mods Nexus</h2>
+        <div id="home-webview"></div>
+      </section>
+      <section id="tab-nexus" class="tab">
+        <h2>🏠 Nexus Mods</h2>
+        <div id="nexus-content"></div>
+      </section>
+      <!-- Ta section mods est bien là 👇 -->
+      <section id="tab-mods" class="tab">
+        <h2>🗂️ Mods Installés</h2>
+        <div id="mods-content"></div>
+      </section>
+      <section id="tab-ayaka" class="tab">
+        <h2>💠 Ayaka Mods</h2>
+        <div id="ayaka-webview"></div>
+      </section>
+      <section id="tab-settings" class="tab">
+        <h2>⚙️ Paramètres</h2>
+        <div id="settings-content"></div>
+      </section>
+    </main>
+  </div>
+  <script src="modules/home.js"></script>
+  <script src="modules/nexus.js"></script>
+  <script src="modules/ayaka.js"></script>
+  <script src="index.js"></script>
+  <script src="modules/settings.js"></script>
+  <script src="modules/mods.js"></script>
+  <div id="notification" class="hidden"></div>
+  <script src="modules/popup.js"></script>
+</body>
+</html>
