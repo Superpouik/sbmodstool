@@ -18,6 +18,13 @@
         <li data-tab="ayaka">💠 Ayaka</li>
         <li data-tab="settings">⚙️ Paramètres</li>
       </ul>
+      <!-- Bouton Launch en bas de la sidebar -->
+      <div id="launch-section">
+        <button id="launch-game" class="launch-btn">
+          <span class="launch-icon">🎮</span>
+          <span class="launch-text">Launch Stellar Blade</span>
+        </button>
+      </div>
     </aside>
     <main id="main-content">
       <section id="tab-home" class="tab active">
@@ -28,7 +35,6 @@
         <h2>🏠 Nexus Mods</h2>
         <div id="nexus-content"></div>
       </section>
-      <!-- Ta section mods est bien là 👇 -->
       <section id="tab-mods" class="tab">
         <h2>🗂️ Mods Installés</h2>
         <div id="mods-content"></div>
@@ -43,13 +49,19 @@
       </section>
     </main>
   </div>
+  
+  <!-- Scripts principaux -->
+  <script src="index.js"></script>
   <script src="modules/home.js"></script>
   <script src="modules/nexus.js"></script>
   <script src="modules/ayaka.js"></script>
-  <script src="index.js"></script>
   <script src="modules/settings.js"></script>
   <script src="modules/mods.js"></script>
-  <div id="notification" class="hidden"></div>
   <script src="modules/popup.js"></script>
+  <script src="modules/launcher.js"></script>
+  <!-- 🆕 Menu contextuel images - UNE SEULE FOIS -->
+  <script src="modules/image-context.js"></script>
+  
+  <div id="notification" class="hidden"></div>
 </body>
 </html>
