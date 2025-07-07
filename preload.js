@@ -94,11 +94,92 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }).on('error', () => resolve(false));
     });
   },
-  showImageContextMenu: (url) => {
-    ipcRenderer.send('show-image-context-menu', url);
+  
+  // 🆕 FONCTION MENU CONTEXTUEL IMAGES
+  showImageContextMenu: (imageData) => {
+    console.log('🖼️ Demande menu contextuel via preload:', imageData.imageUrl);
+    ipcRenderer.send('show-image-menu', imageData);
   },
+  
+  // 🆕 Fonction pour récupérer la liste des mods
+  getModsList: async () => {
+    try {
+      const modsPath = await ipcRenderer.invoke('get-localStorage-item', 'mods_path') || '';
+      const disabledModsPath = await ipcRenderer.invoke('get-localStorage-item', 'disabled_mods_path') || '';
+      
+      if (!modsPath || !disabledModsPath) {
+        return { all: [], active: [], disabled: [] };
+      }
+
+      const activeMods = fs.readdirSync(modsPath).filter(f => 
+        fs.statSync(path.join(modsPath, f)).isDirectory()
+      );
+      
+      const disabledMods = fs.readdirSync(disabledModsPath).filter(f => 
+        fs.statSync(path.join(disabledModsPath, f)).isDirectory()
+      );
+      
+      return {
+        all: [...activeMods, ...disabledMods],
+        active: activeMods,
+        disabled: disabledMods
+      };
+    } catch (error) {
+      console.error('❌ Erreur getModsList:', error);
+      return { all: [], active: [], disabled: [] };
+    }
+  },
+  
+  // 🆕 Fonction pour télécharger une image pour un mod spécifique
+  downloadImageForMod: async (imageUrl, modName) => {
+    return await ipcRenderer.invoke('download-image-for-mod', imageUrl, modName);
+  },
+
   onImageUrlCopied: (callback) => {
     ipcRenderer.on('image-url-copied', (...args) => callback(...args));
   },
-  openExternal: (url) => shell.openExternal(url)
+  openExternal: (url) => shell.openExternal(url),
+  
+  // 🆕 NOUVEAUX LISTENERS POUR MENU CONTEXTUEL
+  onModSelectorRequest: (callback) => {
+    ipcRenderer.on('open-mod-selector', (event, data) => callback(event, data));
+  },
+  
+  onNotification: (callback) => {
+    ipcRenderer.on('show-notification', (event, data) => callback(event, data));
+  },
+  
+  // 🎮 Fonction pour lancer Stellar Blade
+  launchGame: async (exePath) => {
+    try {
+      const { spawn } = require('child_process');
+      const path = require('path');
+      const fs = require('fs');
+      
+      // Vérifie que le fichier existe
+      if (!fs.existsSync(exePath)) {
+        console.error('Fichier exe non trouvé:', exePath);
+        return false;
+      }
+      
+      // Extrait le répertoire du jeu pour définir le cwd
+      const gameDir = path.dirname(exePath);
+      
+      // Lance le jeu en arrière-plan
+      const gameProcess = spawn(exePath, [], {
+        cwd: gameDir,
+        detached: true,
+        stdio: 'ignore'
+      });
+      
+      // Détache le processus pour qu'il continue même si l'app se ferme
+      gameProcess.unref();
+      
+      console.log('Stellar Blade lancé depuis:', exePath);
+      return true;
+    } catch (error) {
+      console.error('Erreur lors du lancement du jeu:', error);
+      return false;
+    }
+  }
 });
