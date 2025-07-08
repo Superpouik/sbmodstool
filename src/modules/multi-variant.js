@@ -138,69 +138,16 @@ class MultiVariantManager {
     try {
       console.log('⚙️ Installation de variants multiples:', selectedVariants.map(v => v.name));
 
-      // Trie les variants par priorité (requis en premier, puis par taille)
-      const sortedVariants = selectedVariants.sort((a, b) => {
-        const aRequired = this.requiredPatterns.some(pattern => pattern.test(a.name));
-        const bRequired = this.requiredPatterns.some(pattern => pattern.test(b.name));
-        
-        if (aRequired && !bRequired) return -1;
-        if (!aRequired && bRequired) return 1;
-        return b.sizeBytes - a.sizeBytes; // Plus gros en premier
-      });
-
-      // Collecte tous les fichiers à installer avec gestion des conflits
-      const filesToInstall = new Map(); // chemin relatif -> { source, priority, variant }
+      // 🔧 CORRECTION : Utilise window.electronAPI au lieu de require direct
+      const result = await window.electronAPI.installMultipleVariants(modPath, selectedVariants, allVariants);
       
-      for (let i = 0; i < sortedVariants.length; i++) {
-        const variant = sortedVariants[i];
-        const priority = sortedVariants.length - i; // Plus prioritaire = plus haut
-
-        console.log(`📦 Traitement variant "${variant.name}" (priorité: ${priority})`);
-        
-        await this.collectVariantFiles(variant.path, '', filesToInstall, priority, variant.name);
+      if (result && result.success) {
+        console.log(`✅ Installation multiple terminée: ${result.fileCount || 0} fichiers installés`);
+        return result;
+      } else {
+        console.error('❌ Erreur installation multiple:', result?.error);
+        return { success: false, error: result?.error || 'Installation échouée' };
       }
-
-      // Installe les fichiers dans l'ordre de priorité
-      let installedCount = 0;
-      for (const [relativePath, fileInfo] of filesToInstall) {
-        const sourcePath = fileInfo.source;
-        const destPath = require('path').join(modPath, relativePath);
-        
-        try {
-          // Crée le dossier de destination si nécessaire
-          const destDir = require('path').dirname(destPath);
-          if (!require('fs').existsSync(destDir)) {
-            require('fs').mkdirSync(destDir, { recursive: true });
-          }
-
-          // Copie le fichier
-          require('fs').copyFileSync(sourcePath, destPath);
-          installedCount++;
-          console.log(`✅ Installé: ${relativePath} (de ${fileInfo.variant})`);
-          
-        } catch (error) {
-          console.error(`❌ Erreur installation ${relativePath}:`, error.message);
-        }
-      }
-
-      // Supprime tous les dossiers de variants originaux
-      for (const variant of allVariants) {
-        try {
-          if (require('fs').existsSync(variant.path)) {
-            await require('rimraf').sync(variant.path);
-            console.log(`🗑️ Dossier variant supprimé: ${variant.name}`);
-          }
-        } catch (error) {
-          console.error(`❌ Erreur suppression ${variant.name}:`, error.message);
-        }
-      }
-
-      console.log(`✅ Installation multiple terminée: ${installedCount} fichiers installés`);
-      return { 
-        success: true, 
-        installedVariants: selectedVariants.map(v => v.name),
-        fileCount: installedCount 
-      };
 
     } catch (error) {
       console.error('❌ Erreur installation multiple:', error);
@@ -209,47 +156,12 @@ class MultiVariantManager {
   }
 
   /**
-   * Collecte récursivement tous les fichiers d'un variant
-   */
-  async collectVariantFiles(variantPath, relativePath, filesToInstall, priority, variantName) {
-    const fs = require('fs');
-    const path = require('path');
-
-    try {
-      const items = fs.readdirSync(path.join(variantPath, relativePath));
-
-      for (const item of items) {
-        const itemPath = path.join(variantPath, relativePath, item);
-        const relativeItemPath = path.join(relativePath, item);
-        const stat = fs.statSync(itemPath);
-
-        if (stat.isDirectory()) {
-          // Récursion pour les sous-dossiers
-          await this.collectVariantFiles(variantPath, relativeItemPath, filesToInstall, priority, variantName);
-        } else if (stat.isFile()) {
-          // Ajoute le fichier s'il n'existe pas ou si la priorité est plus élevée
-          const normalizedPath = relativeItemPath.replace(/\\/g, '/');
-          
-          if (!filesToInstall.has(normalizedPath) || filesToInstall.get(normalizedPath).priority < priority) {
-            filesToInstall.set(normalizedPath, {
-              source: itemPath,
-              priority: priority,
-              variant: variantName
-            });
-          } else {
-            console.log(`⚠️ Conflit fichier: ${normalizedPath} - priorité ${filesToInstall.get(normalizedPath).variant} > ${variantName}`);
-          }
-        }
-      }
-    } catch (error) {
-      console.error(`❌ Erreur collecte fichiers ${variantName}:`, error.message);
-    }
-  }
-
-  /**
    * Affiche l'interface de sélection multiple
    */
   showMultiVariantSelector(modPath, variants, callback) {
+    console.log('🎭 Affichage interface multi-variants pour:', variants.length, 'variants');
+    
+    // Ferme les popups existants
     if (window.Popup) {
       window.Popup.close();
     }
@@ -358,22 +270,28 @@ class MultiVariantManager {
       
       // Met à jour les compteurs
       const totalSize = selectedVariants.reduce((sum, v) => sum + v.sizeBytes, 0);
-      popup.querySelector('#selected-count').textContent = selectedVariants.length;
-      popup.querySelector('#total-size').textContent = this.formatBytes(totalSize);
+      const selectedCountEl = popup.querySelector('#selected-count');
+      const totalSizeEl = popup.querySelector('#total-size');
+      
+      if (selectedCountEl) selectedCountEl.textContent = selectedVariants.length;
+      if (totalSizeEl) totalSizeEl.textContent = this.formatBytes(totalSize);
       
       // Vérifie les conflits
       const conflicts = this.checkConflicts(selectedVariants, analysis);
       const warningsDiv = popup.querySelector('#conflict-warnings');
+      const installBtn = popup.querySelector('#popup-install');
       
       if (conflicts.length > 0) {
-        warningsDiv.innerHTML = conflicts.map(conflict =>
-          `<div class="conflict-warning">⚠️ ${conflict.message}</div>`
-        ).join('');
-        warningsDiv.style.display = 'block';
-        popup.querySelector('#popup-install').disabled = true;
+        if (warningsDiv) {
+          warningsDiv.innerHTML = conflicts.map(conflict =>
+            `<div class="conflict-warning">⚠️ ${conflict.message}</div>`
+          ).join('');
+          warningsDiv.style.display = 'block';
+        }
+        if (installBtn) installBtn.disabled = true;
       } else {
-        warningsDiv.style.display = 'none';
-        popup.querySelector('#popup-install').disabled = selectedVariants.length === 0;
+        if (warningsDiv) warningsDiv.style.display = 'none';
+        if (installBtn) installBtn.disabled = selectedVariants.length === 0;
       }
     };
 
@@ -381,7 +299,9 @@ class MultiVariantManager {
     popup.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
       checkbox.addEventListener('change', () => {
         const variantItem = checkbox.closest('.multi-variant-item');
-        variantItem.classList.toggle('selected', checkbox.checked);
+        if (variantItem) {
+          variantItem.classList.toggle('selected', checkbox.checked);
+        }
         updateSelection();
       });
     });
@@ -391,7 +311,7 @@ class MultiVariantManager {
       item.addEventListener('click', (e) => {
         if (e.target.type !== 'checkbox' && !e.target.matches('label')) {
           const checkbox = item.querySelector('input[type="checkbox"]');
-          if (!checkbox.disabled) {
+          if (checkbox && !checkbox.disabled) {
             checkbox.checked = !checkbox.checked;
             checkbox.dispatchEvent(new Event('change'));
           }
@@ -400,33 +320,40 @@ class MultiVariantManager {
     });
 
     // Bouton installer
-    popup.querySelector('#popup-install').onclick = async () => {
-      const selectedCheckboxes = popup.querySelectorAll('input[type="checkbox"]:checked');
-      const selectedVariants = Array.from(selectedCheckboxes).map(cb => 
-        variants[parseInt(cb.dataset.variantIndex)]
-      );
-      
-      if (selectedVariants.length === 0) return;
-      
-      popup.querySelector('#popup-install').disabled = true;
-      popup.querySelector('#popup-install').innerHTML = '⏳ Installation...';
-      
-      try {
-        const result = await this.installMultipleVariants(modPath, selectedVariants, variants);
-        this.closeMultiVariantPopup();
-        callback(result);
-      } catch (error) {
-        console.error('❌ Erreur installation:', error);
-        this.closeMultiVariantPopup();
-        callback({ success: false, error: error.message });
-      }
-    };
+    const installBtn = popup.querySelector('#popup-install');
+    if (installBtn) {
+      installBtn.onclick = async () => {
+        const selectedCheckboxes = popup.querySelectorAll('input[type="checkbox"]:checked');
+        const selectedVariants = Array.from(selectedCheckboxes).map(cb => 
+          variants[parseInt(cb.dataset.variantIndex)]
+        );
+        
+        if (selectedVariants.length === 0) return;
+        
+        installBtn.disabled = true;
+        installBtn.innerHTML = '⏳ Installation...';
+        
+        try {
+          console.log('🔧 Démarrage installation variants:', selectedVariants.map(v => v.name));
+          const result = await this.installMultipleVariants(modPath, selectedVariants, variants);
+          this.closeMultiVariantPopup();
+          callback(result);
+        } catch (error) {
+          console.error('❌ Erreur installation:', error);
+          this.closeMultiVariantPopup();
+          callback({ success: false, error: error.message });
+        }
+      };
+    }
 
     // Bouton annuler
-    popup.querySelector('#popup-cancel').onclick = () => {
-      this.closeMultiVariantPopup();
-      callback({ success: false, cancelled: true });
-    };
+    const cancelBtn = popup.querySelector('#popup-cancel');
+    if (cancelBtn) {
+      cancelBtn.onclick = () => {
+        this.closeMultiVariantPopup();
+        callback({ success: false, cancelled: true });
+      };
+    }
 
     // Fermeture par Échap
     const handleEscape = (e) => {
@@ -443,7 +370,10 @@ class MultiVariantManager {
     
     // Marque les items présélectionnés
     popup.querySelectorAll('input[type="checkbox"]:checked').forEach(checkbox => {
-      checkbox.closest('.multi-variant-item').classList.add('selected');
+      const item = checkbox.closest('.multi-variant-item');
+      if (item) {
+        item.classList.add('selected');
+      }
     });
   }
 
@@ -648,55 +578,6 @@ class MultiVariantManager {
         opacity: 0.5;
         cursor: not-allowed;
       }
-      
-      /* Scrollbar personnalisée */
-      .multi-variants-container::-webkit-scrollbar {
-        width: 8px;
-      }
-      
-      .multi-variants-container::-webkit-scrollbar-track {
-        background: #191b25;
-        border-radius: 10px;
-      }
-      
-      .multi-variants-container::-webkit-scrollbar-thumb {
-        background: #444;
-        border-radius: 10px;
-      }
-      
-      .multi-variants-container::-webkit-scrollbar-thumb:hover {
-        background: #555;
-      }
-      
-      /* Responsive */
-      @media (max-width: 768px) {
-        .multi-variant-popup .popup-content {
-          min-width: 90vw;
-          max-width: 90vw;
-          max-height: 90vh;
-          margin: 0 20px;
-        }
-        
-        .variant-details-multi {
-          flex-direction: column;
-          gap: 6px;
-        }
-        
-        .info-row {
-          flex-direction: column;
-          gap: 8px;
-          text-align: center;
-        }
-        
-        .multi-variant-popup .popup-btns {
-          flex-direction: column;
-          gap: 10px;
-        }
-        
-        .multi-variant-popup .popup-btns button {
-          width: 100%;
-        }
-      }
     `;
     
     document.head.appendChild(style);
@@ -732,9 +613,29 @@ class MultiVariantManager {
 // Instance globale
 window.MultiVariantManager = new MultiVariantManager();
 
-// Fonction d'entrée principale - à utiliser au lieu de Popup.askModVariant pour les mods modulaires
+// 🔧 CORRECTION : Fonction d'entrée principale - à utiliser au lieu de Popup.askModVariant
 window.showModVariantSelector = function(modPath, variants, callback) {
+  console.log('🎯 showModVariantSelector appelé:', { modPath, variantsCount: variants?.length });
+  
+  // Validation des paramètres
+  if (!modPath || !variants || !Array.isArray(variants) || variants.length === 0) {
+    console.error('❌ Paramètres invalides pour showModVariantSelector');
+    callback({ success: false, error: 'Paramètres invalides' });
+    return;
+  }
+
+  if (!callback || typeof callback !== 'function') {
+    console.error('❌ Callback invalide pour showModVariantSelector');
+    return;
+  }
+
   const manager = window.MultiVariantManager;
+  
+  if (!manager) {
+    console.error('❌ MultiVariantManager non disponible');
+    callback({ success: false, error: 'MultiVariantManager non disponible' });
+    return;
+  }
   
   if (manager.isModularMod(variants)) {
     console.log('🎭 Mod modulaire détecté - Interface multi-sélection');
@@ -742,12 +643,18 @@ window.showModVariantSelector = function(modPath, variants, callback) {
   } else {
     console.log('🎯 Mod standard - Interface sélection unique');
     // Utilise l'ancien système pour les mods simples
-    if (window.Popup && window.Popup.askModVariant) {
+    if (window.Popup && typeof window.Popup.askModVariant === 'function') {
       window.Popup.askModVariant(modPath, variants, callback);
     } else {
+      console.error('❌ Popup.askModVariant non disponible');
       callback({ success: false, error: 'Interface de sélection non disponible' });
     }
   }
 };
 
 console.log('✅ Multi-Variant Manager initialisé');
+
+// Export pour utilisation globale
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { MultiVariantManager };
+}
