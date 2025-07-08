@@ -1,4 +1,4 @@
-// Module paramètres harmonisé avec sélection de langue
+// Module paramètres harmonisé avec sélection de langue et chiffrement sécurisé
 
 // Configuration des langues disponibles
 const availableLanguages = [
@@ -9,26 +9,26 @@ const availableLanguages = [
 const confNames = [
   {
     key: 'game_path',
-    label: 'game folder (SB-Win64-Shipping.exe)',
-    placeholder: 'Select game folder…',
+    label: 'Dossier du jeu (SB-Win64-Shipping.exe)',
+    placeholder: 'Sélectionne le dossier du jeu…',
     icon: '🎮'
   },
   {
     key: 'mods_path',
-    label: '~mods folder (activated)',
-    placeholder: 'select ~mods folder…',
+    label: 'Dossier ~mods (activés)',
+    placeholder: 'Sélectionne le dossier ~mods…',
     icon: '✅'
   },
   {
     key: 'disabled_mods_path',
-    label: 'Mods disabled folder',
-    placeholder: 'Selects the folder for deactivated mods…',
+    label: 'Dossier Mods désactivés',
+    placeholder: 'Sélectionne le dossier des mods désactivés…',
     icon: '❌'
   },
   {
     key: 'downloads_path',
-    label: 'Mods download folder',
-    placeholder: 'Select where to download mods…',
+    label: 'Dossier de téléchargement des mods',
+    placeholder: 'Sélectionne où télécharger les mods…',
     icon: '📥'
   }
 ];
@@ -42,7 +42,101 @@ function showNotification(msg, error = false) {
   }
 }
 
-window.loadSettingsPage = function() {
+// 🆕 GESTION SÉCURISÉE DE LA CLÉ API
+const ApiKeyManager = {
+  // Variable pour stocker temporairement la clé déchiffrée
+  currentApiKey: null,
+  
+  // Charge la clé API de manière sécurisée
+  async loadApiKey() {
+    try {
+      console.log('🔐 Chargement sécurisé de la clé API...');
+      
+      const result = await window.electronAPI.decryptAndGetApiKey();
+      
+      if (result.success && result.apiKey) {
+        this.currentApiKey = result.apiKey;
+        console.log('✅ Clé API chargée avec succès');
+        
+        // Si la clé était en texte brut, on la migre vers le chiffrement
+        if (!result.encrypted && result.needsMigration) {
+          console.log('🔄 Migration de la clé vers le chiffrement...');
+          await this.saveApiKey(result.apiKey);
+        }
+        
+        return result.apiKey;
+      } else {
+        this.currentApiKey = null;
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ Erreur chargement clé API:', error);
+      this.currentApiKey = null;
+      return null;
+    }
+  },
+  
+  // Sauvegarde la clé API de manière sécurisée
+  async saveApiKey(apiKey) {
+    try {
+      console.log('🔐 Sauvegarde sécurisée de la clé API...');
+      
+      const result = await window.electronAPI.encryptAndSaveApiKey(apiKey);
+      
+      if (result.success) {
+        this.currentApiKey = apiKey;
+        console.log('✅ Clé API sauvegardée avec succès');
+        
+        if (result.encrypted) {
+          console.log('🔒 Clé API chiffrée avec safeStorage');
+        } else if (result.fallback) {
+          console.warn('⚠️ Clé API sauvegardée en fallback (localStorage)');
+        }
+        
+        return true;
+      } else {
+        console.error('❌ Erreur sauvegarde clé API:', result.error);
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Erreur sauvegarde clé API:', error);
+      return false;
+    }
+  },
+  
+  // Supprime la clé API de manière sécurisée
+  async deleteApiKey() {
+    try {
+      console.log('🗑️ Suppression sécurisée de la clé API...');
+      
+      const result = await window.electronAPI.deleteApiKey();
+      
+      if (result.success) {
+        this.currentApiKey = null;
+        console.log('✅ Clé API supprimée avec succès');
+        return true;
+      } else {
+        console.error('❌ Erreur suppression clé API:', result.error);
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Erreur suppression clé API:', error);
+      return false;
+    }
+  },
+  
+  // Récupère la clé API actuelle (en cache)
+  getCurrentApiKey() {
+    return this.currentApiKey;
+  },
+  
+  // Vérifie si une clé API est configurée
+  hasApiKey() {
+    return this.currentApiKey && this.currentApiKey.length > 0;
+  }
+};
+
+window.loadSettingsPage = async function() {
   const container = document.getElementById('settings-content');
   container.innerHTML = '';
 
@@ -51,8 +145,8 @@ window.loadSettingsPage = function() {
   header.className = 'settings-header';
   header.innerHTML = `
     <div class="settings-title">
-      <h2 style="margin: 0; color: #82eefd;">⚙️ Settings</h2>
-      <p style="color: #888; margin: 5px 0 0 0;">Configure your folders, API keys and preferences</p>
+      <h2 style="margin: 0; color: #82eefd;">⚙️ Configuration</h2>
+      <p style="color: #888; margin: 5px 0 0 0;">Configurez vos dossiers, clés API et préférences</p>
     </div>
     <div class="settings-stats">
       <span id="configured-count">0</span> sur <span id="total-count">4</span> dossiers configurés
@@ -65,7 +159,7 @@ window.loadSettingsPage = function() {
   mainContainer.className = 'settings-container';
 
   // ===== SECTION DOSSIERS =====
-  const foldersSection = createSection('📁 Folder', 'Setting paths to your game folders and mods');
+  const foldersSection = createSection('📁 Dossiers', 'Configuration des chemins vers vos dossiers de jeu et mods');
   const foldersGrid = document.createElement('div');
   foldersGrid.className = 'settings-grid';
 
@@ -78,13 +172,13 @@ window.loadSettingsPage = function() {
   mainContainer.appendChild(foldersSection);
 
   // ===== SECTION API & CONNEXION =====
-  const apiSection = createSection('🔗 API & connection', 'enter your nexus API key');
-  const apiCard = createApiCard();
+  const apiSection = createSection('🔗 API & Connexion', 'Configuration des clés API pour les services externes');
+  const apiCard = await createApiCard(); // 🆕 Async pour charger la clé chiffrée
   apiSection.appendChild(apiCard);
   mainContainer.appendChild(apiSection);
 
   // ===== SECTION INTERFACE =====
-  const interfaceSection = createSection('🎨 Interface', 'User interface customization');
+  const interfaceSection = createSection('🎨 Interface', 'Personnalisation de l\'interface utilisateur');
   const interfaceGrid = document.createElement('div');
   interfaceGrid.className = 'settings-grid';
   
@@ -136,9 +230,9 @@ function createFolderCard(conf) {
     
     <div class="card-actions">
       <button class="browse-btn" data-key="${conf.key}">
-        📂 Parcourir
+        📂 Parcourir…
       </button>
-      ${isConfigured ? `<button class="clear-btn" data-key="${conf.key}">🗑️ delete</button>` : ''}
+      ${isConfigured ? `<button class="clear-btn" data-key="${conf.key}">🗑️ Effacer</button>` : ''}
     </div>
   `;
 
@@ -148,7 +242,7 @@ function createFolderCard(conf) {
     const path = await window.electronAPI.selectDirectory();
     if (path) {
       localStorage.setItem(conf.key, path);
-      showNotification(`✅ folder ${conf.label.toLowerCase()} configured !`);
+      showNotification(`✅ Dossier ${conf.label.toLowerCase()} configuré !`);
       window.loadSettingsPage(); // Refresh
     }
   });
@@ -157,7 +251,7 @@ function createFolderCard(conf) {
   if (clearBtn) {
     clearBtn.addEventListener('click', () => {
       localStorage.removeItem(conf.key);
-      showNotification(`🗑️ folder ${conf.label.toLowerCase()} delete`);
+      showNotification(`🗑️ Dossier ${conf.label.toLowerCase()} effacé`);
       window.loadSettingsPage(); // Refresh
     });
   }
@@ -165,17 +259,28 @@ function createFolderCard(conf) {
   return card;
 }
 
-function createApiCard() {
+// 🆕 CARTE API AVEC CHIFFREMENT SÉCURISÉ
+async function createApiCard() {
   const card = document.createElement('div');
   card.className = 'settings-card api-card';
   
-  const currentKey = localStorage.getItem('nexus_api_key') || '';
+  // Charge la clé API de manière sécurisée
+  const currentKey = await ApiKeyManager.loadApiKey() || '';
   const isConfigured = currentKey.length > 0;
+  
+  // Vérifie si le chiffrement sécurisé est disponible
+  const isSecureStorageAvailable = await window.electronAPI.isSafeStorageAvailable();
   
   card.innerHTML = `
     <div class="card-header">
       <div class="card-icon">🔑</div>
-      <div class="card-title">Clé API Nexus Mods</div>
+      <div class="card-title">
+        Clé API Nexus Mods
+        ${isSecureStorageAvailable ? 
+          '<div style="font-size: 0.7em; color: #28d47b; margin-top: 2px;">🔒 Chiffrement sécurisé</div>' : 
+          '<div style="font-size: 0.7em; color: #ff9f43; margin-top: 2px;">⚠️ Stockage non chiffré</div>'
+        }
+      </div>
       <div class="card-status ${isConfigured ? 'configured' : 'not-configured'}">
         ${isConfigured ? '✅' : '⚠️'}
       </div>
@@ -185,10 +290,18 @@ function createApiCard() {
       <div class="api-input-container">
         <input type="password" id="nexus-api-key" 
                value="${currentKey}" 
-               placeholder="Paste your Nexus Mods API key here..."
+               placeholder="Collez votre clé API Nexus Mods ici..."
                autocomplete="off">
         <button class="toggle-visibility" type="button">👁️</button>
       </div>
+      
+      ${!isSecureStorageAvailable ? `
+        <div class="security-warning">
+          ⚠️ <strong>Attention :</strong> Le chiffrement sécurisé n'est pas disponible sur ce système. 
+          La clé sera stockée en texte brut dans localStorage.
+        </div>
+      ` : ''}
+      
       <div class="api-help">
         💡 <a href="https://www.nexusmods.com/users/myaccount?tab=api" target="_blank">
           Obtenir votre clé API Nexus Mods
@@ -197,7 +310,7 @@ function createApiCard() {
     </div>
     
     <div class="card-actions">
-      <button class="save-btn" id="save-api-btn">💾 Save</button>
+      <button class="save-btn" id="save-api-btn">💾 Sauvegarder</button>
       ${isConfigured ? '<button class="clear-btn" id="clear-api-btn">🗑️ Effacer</button>' : ''}
     </div>
   `;
@@ -215,24 +328,58 @@ function createApiCard() {
     toggleBtn.textContent = isPassword ? '🙈' : '👁️';
   });
 
-  // Save API key
-  saveBtn.addEventListener('click', () => {
+  // Save API key avec chiffrement sécurisé
+  saveBtn.addEventListener('click', async () => {
     const key = input.value.trim();
     if (key) {
-      localStorage.setItem('nexus_api_key', key);
-      showNotification('🔑 Nexus API key saved !');
-      window.loadSettingsPage(); // Refresh
+      // Désactive le bouton pendant la sauvegarde
+      saveBtn.disabled = true;
+      saveBtn.textContent = '🔄 Sauvegarde...';
+      
+      try {
+        const success = await ApiKeyManager.saveApiKey(key);
+        
+        if (success) {
+          showNotification('🔑 Clé API Nexus sauvegardée avec chiffrement sécurisé !');
+          setTimeout(() => window.loadSettingsPage(), 1000); // Refresh après succès
+        } else {
+          showNotification('❌ Erreur lors de la sauvegarde de la clé API', true);
+        }
+      } catch (error) {
+        console.error('❌ Erreur sauvegarde clé API:', error);
+        showNotification('❌ Erreur lors de la sauvegarde de la clé API', true);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = '💾 Sauvegarder';
+      }
     } else {
-      showNotification('⚠️ Please enter a valid API key', true);
+      showNotification('⚠️ Veuillez saisir une clé API valide', true);
     }
   });
 
-  // Clear API key
+  // Clear API key avec suppression sécurisée
   if (clearBtn) {
-    clearBtn.addEventListener('click', () => {
-      localStorage.removeItem('nexus_api_key');
-      showNotification('🗑️ Clé API Nexus effacée');
-      window.loadSettingsPage(); // Refresh
+    clearBtn.addEventListener('click', async () => {
+      // Désactive le bouton pendant la suppression
+      clearBtn.disabled = true;
+      clearBtn.textContent = '🔄 Suppression...';
+      
+      try {
+        const success = await ApiKeyManager.deleteApiKey();
+        
+        if (success) {
+          showNotification('🗑️ Clé API Nexus supprimée de manière sécurisée');
+          setTimeout(() => window.loadSettingsPage(), 1000); // Refresh après succès
+        } else {
+          showNotification('❌ Erreur lors de la suppression de la clé API', true);
+        }
+      } catch (error) {
+        console.error('❌ Erreur suppression clé API:', error);
+        showNotification('❌ Erreur lors de la suppression de la clé API', true);
+      } finally {
+        clearBtn.disabled = false;
+        clearBtn.textContent = '🗑️ Effacer';
+      }
     });
   }
 
@@ -256,7 +403,7 @@ function createLanguageCard() {
   card.innerHTML = `
     <div class="card-header">
       <div class="card-icon">🌍</div>
-      <div class="card-title">Interface language</div>
+      <div class="card-title">Langue de l'interface</div>
       <div class="card-status configured">
         ${selectedLang.flag}
       </div>
@@ -273,13 +420,13 @@ function createLanguageCard() {
         </select>
       </div>
       <div class="language-info">
-        💡 The selected language will be applied the next time the application is restarted.
+        💡 La langue sélectionnée sera appliquée au prochain redémarrage de l'application
       </div>
     </div>
     
     <div class="card-actions">
       <button class="apply-btn" id="apply-language-btn">🔄 Appliquer</button>
-      <button class="restart-btn" id="restart-app-btn" style="display: none;">🚀 restart</button>
+      <button class="restart-btn" id="restart-app-btn" style="display: none;">🚀 Redémarrer</button>
     </div>
   `;
 
@@ -292,10 +439,10 @@ function createLanguageCard() {
     const newLang = select.value;
     if (newLang !== currentLang) {
       applyBtn.style.background = '#ff6b35';
-      applyBtn.textContent = '⚠️ apply changes';
+      applyBtn.textContent = '⚠️ Appliquer changement';
     } else {
       applyBtn.style.background = '';
-      applyBtn.textContent = '🔄 Apply';
+      applyBtn.textContent = '🔄 Appliquer';
     }
   });
 
@@ -308,20 +455,20 @@ function createLanguageCard() {
     
     // Affiche le bouton redémarrer
     restartBtn.style.display = 'inline-block';
-    applyBtn.textContent = '✅ Applyed';
+    applyBtn.textContent = '✅ Appliqué';
     applyBtn.disabled = true;
     
     // Cache le message d'info et affiche un nouveau
     const infoDiv = card.querySelector('.language-info');
-    infoDiv.innerHTML = '🔄 <strong>Restart the application to see the changes</strong>';
+    infoDiv.innerHTML = '🔄 <strong>Redémarrez l\'application pour voir les changements</strong>';
     infoDiv.style.color = '#ff6b35';
   });
 
   restartBtn.addEventListener('click', () => {
     // Note: Dans un vrai environnement Electron, on pourrait utiliser app.relaunch()
-    showNotification('🚀 Restart functionality to be implemented');
+    showNotification('🚀 Fonctionnalité de redémarrage à implémenter');
     // Pour l'instant, on propose juste de recharger
-    if (confirm('Do you want to reload the application now ?')) {
+    if (confirm('Voulez-vous recharger l\'application maintenant ?')) {
       window.location.reload();
     }
   });
@@ -340,6 +487,9 @@ function updateSettingsStats() {
   if (configuredSpan) configuredSpan.textContent = configuredCount;
   if (totalSpan) totalSpan.textContent = confNames.length;
 }
+
+// 🆕 EXPOSE LE GESTIONNAIRE D'API GLOBALEMENT
+window.ApiKeyManager = ApiKeyManager;
 
 // Charge direct si onglet settings actif
 if(document.querySelector('#tab-settings')?.classList.contains('active')) {
