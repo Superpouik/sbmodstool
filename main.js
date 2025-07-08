@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell, Menu, clipboard } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, Menu, clipboard, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -136,6 +136,112 @@ function createWindow() {
     } catch (error) {
       console.error('Erreur récupération localStorage:', error);
       return null;
+    }
+  });
+
+  // 🔒 NOUVEAUX HANDLERS SÉCURISÉS POUR LA CLÉ API
+  
+  // Vérifier si safeStorage est disponible
+  ipcMain.handle('safe-storage-available', async () => {
+    try {
+      return safeStorage.isEncryptionAvailable();
+    } catch (error) {
+      console.error('❌ Erreur vérification safeStorage:', error);
+      return false;
+    }
+  });
+
+  // Chiffrer et sauvegarder la clé API
+  ipcMain.handle('encrypt-and-save-api-key', async (event, apiKey) => {
+    try {
+      console.log('🔐 Chiffrement de la clé API...');
+      
+      if (!safeStorage.isEncryptionAvailable()) {
+        console.warn('⚠️ safeStorage non disponible, stockage en texte brut');
+        // Fallback : stockage en localStorage normal
+        await win.webContents.executeJavaScript(`localStorage.setItem("nexus_api_key", ${JSON.stringify(apiKey)})`);
+        return { success: true, encrypted: false, fallback: true };
+      }
+
+      // Chiffrement sécurisé
+      const encryptedData = safeStorage.encryptString(apiKey);
+      const encryptedBase64 = encryptedData.toString('base64');
+      
+      // Stockage de la version chiffrée dans localStorage
+      await win.webContents.executeJavaScript(`localStorage.setItem("nexus_api_key_encrypted", ${JSON.stringify(encryptedBase64)})`);
+      
+      // Supprime l'ancienne clé en texte brut si elle existe
+      await win.webContents.executeJavaScript(`localStorage.removeItem("nexus_api_key")`);
+      
+      console.log('✅ Clé API chiffrée et sauvegardée');
+      return { success: true, encrypted: true, fallback: false };
+      
+    } catch (error) {
+      console.error('❌ Erreur lors du chiffrement:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Déchiffrer et récupérer la clé API
+  ipcMain.handle('decrypt-and-get-api-key', async () => {
+    try {
+      console.log('🔓 Déchiffrement de la clé API...');
+      
+      // Essaie d'abord de récupérer la version chiffrée
+      const encryptedBase64 = await win.webContents.executeJavaScript(`localStorage.getItem("nexus_api_key_encrypted")`);
+      
+      if (encryptedBase64) {
+        if (!safeStorage.isEncryptionAvailable()) {
+          console.error('❌ safeStorage non disponible pour le déchiffrement');
+          return { success: false, error: 'Chiffrement non disponible' };
+        }
+        
+        try {
+          const encryptedBuffer = Buffer.from(encryptedBase64, 'base64');
+          const decryptedKey = safeStorage.decryptString(encryptedBuffer);
+          console.log('✅ Clé API déchiffrée avec succès');
+          return { success: true, apiKey: decryptedKey, encrypted: true };
+        } catch (decryptError) {
+          console.error('❌ Erreur de déchiffrement:', decryptError);
+          return { success: false, error: 'Impossible de déchiffrer la clé' };
+        }
+      }
+      
+      // Fallback : essaie de récupérer l'ancienne version en texte brut
+      const plaintextKey = await win.webContents.executeJavaScript(`localStorage.getItem("nexus_api_key")`);
+      
+      if (plaintextKey) {
+        console.log('⚠️ Clé API trouvée en texte brut (migration nécessaire)');
+        return { success: true, apiKey: plaintextKey, encrypted: false, needsMigration: true };
+      }
+      
+      // Aucune clé trouvée
+      console.log('ℹ️ Aucune clé API trouvée');
+      return { success: true, apiKey: null, encrypted: false };
+      
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Supprimer la clé API (versions chiffrée et non chiffrée)
+  ipcMain.handle('delete-api-key', async () => {
+    try {
+      console.log('🗑️ Suppression de la clé API...');
+      
+      // Supprime les deux versions
+      await win.webContents.executeJavaScript(`
+        localStorage.removeItem("nexus_api_key_encrypted");
+        localStorage.removeItem("nexus_api_key");
+      `);
+      
+      console.log('✅ Clé API supprimée');
+      return { success: true };
+      
+    } catch (error) {
+      console.error('❌ Erreur lors de la suppression:', error);
+      return { success: false, error: error.message };
     }
   });
 
