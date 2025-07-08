@@ -417,13 +417,6 @@ Clic droit sur un mod :
 - [ ] **Mode compact** pour petits écrans
 - [ ] **Accessibilité** complète (ARIA, navigation clavier)
 
-### **🔌 Intégrations**
-- [ ] **Steam Workshop** support (si disponible)
-- [ ] **ModDB** integration
-- [ ] **Automatic mod updates** check
-- [ ] **Community features** (ratings, comments)
-- [ ] **Cloud sync** des configurations
-
 ## 🤝 Contribution
 
 ### **Architecture modulaire**
@@ -482,6 +475,6 @@ const result = await window.electronAPI.nouvelleFunction(params);
 
 ---
 
-**Créé avec ❤️ par Pouik x GPT**
+**Créé avec ❤️ par Pouik x Claude.ai**
 
 *Version 1.0.0 - Stellar Blade Mod Manager*
