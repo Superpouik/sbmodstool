@@ -8,151 +8,184 @@ const { extractFull } = require('node-7z');
 const https = require('https');
 const http = require('http');
 
-// 🔧 FONCTION UTILITAIRE POUR CORRIGER LA STRUCTURE DES DOSSIERS
+// 🔧 FONCTION AMÉLIORÉE POUR CORRIGER LA STRUCTURE DES DOSSIERS
 function flattenModDirectory(modPath) {
   try {
-    console.log('🔧 Vérification structure du mod:', modPath);
+    console.log('🔧 Correction de structure pour:', modPath);
     
     if (!fs.existsSync(modPath)) {
       console.log('❌ Dossier mod inexistant:', modPath);
-      return false;
+      return { success: false, error: 'Dossier inexistant' };
     }
 
+    const gameFileExtensions = ['.pak', '.ucas', '.utoc'];
     let hasChanges = false;
-    let iterations = 0;
-    const maxIterations = 5; // Évite les boucles infinies
+    let movedFiles = [];
 
-    // Fonction récursive pour aplatir la structure
-    function flattenRecursive(currentPath) {
-      if (iterations >= maxIterations) {
-        console.log('⚠️ Limite d\'itérations atteinte');
-        return false;
-      }
-
-      iterations++;
-      console.log(`🔄 Itération ${iterations} sur:`, currentPath);
-
-      const items = fs.readdirSync(currentPath);
-      const files = items.filter(item => {
-        try {
-          return fs.statSync(path.join(currentPath, item)).isFile();
-        } catch {
-          return false;
-        }
-      });
-      const folders = items.filter(item => {
-        try {
-          return fs.statSync(path.join(currentPath, item)).isDirectory();
-        } catch {
-          return false;
-        }
-      });
-
-      console.log(`📁 Trouvé: ${files.length} fichiers, ${folders.length} dossiers`);
-
-      // Cas 1: Aucun fichier à la racine, un seul sous-dossier
-      if (files.length === 0 && folders.length === 1) {
-        const subFolder = folders[0];
-        const subFolderPath = path.join(currentPath, subFolder);
-        
-        console.log('📦 Déplacement du contenu de:', subFolder);
-        
-        try {
-          // Liste tout le contenu du sous-dossier
-          const subItems = fs.readdirSync(subFolderPath);
-          
-          // Déplace chaque élément vers la racine
-          for (const item of subItems) {
-            const srcPath = path.join(subFolderPath, item);
-            const destPath = path.join(currentPath, item);
-            
-            // Évite les conflits de noms
-            if (fs.existsSync(destPath)) {
-              console.log(`⚠️ Conflit détecté pour: ${item}, ignoré`);
-              continue;
-            }
-            
-            try {
-              fs.renameSync(srcPath, destPath);
-              console.log(`✅ Déplacé: ${item}`);
-              hasChanges = true;
-            } catch (error) {
-              console.error(`❌ Erreur déplacement ${item}:`, error.message);
-            }
-          }
-          
-          // Vérifie si le dossier est maintenant vide
-          const remainingItems = fs.readdirSync(subFolderPath);
-          if (remainingItems.length === 0) {
-            try {
-              fs.rmdirSync(subFolderPath);
-              console.log(`🗑️ Dossier vide supprimé: ${subFolder}`);
-            } catch (error) {
-              console.error(`❌ Erreur suppression dossier ${subFolder}:`, error.message);
-            }
-          }
-          
-          // Vérifie à nouveau récursivement
-          return flattenRecursive(currentPath);
-          
-        } catch (error) {
-          console.error('❌ Erreur lors du traitement du sous-dossier:', error);
-          return false;
-        }
-      }
+    // 📁 ÉTAPE 1: Trouve tous les fichiers de jeu dans tout l'arbre
+    function findGameFilesRecursively(dirPath, relativePath = '') {
+      const gameFiles = [];
       
-      // Cas 2: Plusieurs dossiers mais certains peuvent être des wrappers inutiles
-      else if (folders.length > 0) {
-        console.log('🔍 Vérification des sous-dossiers suspects...');
+      try {
+        const items = fs.readdirSync(dirPath);
         
-        // Cherche des dossiers avec des noms suspects (wrappers)
-        for (const folder of folders) {
-          const folderPath = path.join(currentPath, folder);
+        for (const item of items) {
+          const fullPath = path.join(dirPath, item);
+          const relativeFromRoot = path.join(relativePath, item);
           
           try {
-            const subItems = fs.readdirSync(folderPath);
-            const subFiles = subItems.filter(item => {
-              try {
-                return fs.statSync(path.join(folderPath, item)).isFile();
-              } catch {
-                return false;
-              }
-            });
-            const subFolders = subItems.filter(item => {
-              try {
-                return fs.statSync(path.join(folderPath, item)).isDirectory();
-              } catch {
-                return false;
-              }
-            });
+            const stat = fs.statSync(fullPath);
             
-            // Si le dossier ne contient qu'un seul sous-dossier et aucun fichier
-            if (subFiles.length === 0 && subFolders.length === 1) {
-              console.log('🎯 Dossier wrapper détecté:', folder);
-              return flattenRecursive(folderPath);
+            if (stat.isFile()) {
+              const ext = path.extname(item).toLowerCase();
+              if (gameFileExtensions.includes(ext)) {
+                gameFiles.push({
+                  name: item,
+                  fullPath: fullPath,
+                  relativePath: relativeFromRoot,
+                  isInRoot: relativePath === ''
+                });
+              }
+            } else if (stat.isDirectory()) {
+              // Récursion dans les sous-dossiers
+              const subFiles = findGameFilesRecursively(fullPath, relativeFromRoot);
+              gameFiles.push(...subFiles);
             }
           } catch (error) {
-            console.error(`❌ Erreur analyse dossier ${folder}:`, error.message);
+            console.error(`❌ Erreur accès ${item}:`, error.message);
           }
         }
+      } catch (error) {
+        console.error(`❌ Erreur lecture dossier ${dirPath}:`, error.message);
       }
       
-      return true;
+      return gameFiles;
     }
 
-    const success = flattenRecursive(modPath);
+    // 🔍 Trouve tous les fichiers de jeu
+    const allGameFiles = findGameFilesRecursively(modPath);
+    console.log(`📦 Fichiers de jeu trouvés: ${allGameFiles.length}`);
     
-    if (hasChanges) {
-      console.log('✅ Structure du mod corrigée avec succès');
-    } else {
-      console.log('ℹ️ Aucune correction nécessaire');
+    if (allGameFiles.length === 0) {
+      console.log('ℹ️ Aucun fichier de jeu trouvé');
+      return { success: true, hasChanges: false, message: 'Aucun fichier de jeu trouvé' };
     }
-    
-    return { success, hasChanges };
+
+    // 📊 Affiche les fichiers trouvés
+    allGameFiles.forEach(file => {
+      console.log(`  📄 ${file.name} -> ${file.relativePath} ${file.isInRoot ? '(déjà à la racine)' : ''}`);
+    });
+
+    // 🚀 ÉTAPE 2: Déplace tous les fichiers de jeu vers la racine
+    for (const gameFile of allGameFiles) {
+      if (!gameFile.isInRoot) {
+        const targetPath = path.join(modPath, gameFile.name);
+        
+        // Vérifie les conflits de noms
+        if (fs.existsSync(targetPath)) {
+          console.log(`⚠️ Conflit détecté pour ${gameFile.name}, renommage...`);
+          
+          // Trouve un nom unique
+          let counter = 1;
+          let uniqueName = gameFile.name;
+          const nameWithoutExt = path.parse(gameFile.name).name;
+          const ext = path.parse(gameFile.name).ext;
+          
+          while (fs.existsSync(path.join(modPath, uniqueName))) {
+            uniqueName = `${nameWithoutExt}_${counter}${ext}`;
+            counter++;
+          }
+          
+          console.log(`🔄 Renommage: ${gameFile.name} -> ${uniqueName}`);
+          gameFile.name = uniqueName;
+        }
+        
+        try {
+          const finalTargetPath = path.join(modPath, gameFile.name);
+          fs.renameSync(gameFile.fullPath, finalTargetPath);
+          console.log(`✅ Déplacé: ${gameFile.relativePath} -> ${gameFile.name}`);
+          movedFiles.push(gameFile.name);
+          hasChanges = true;
+        } catch (error) {
+          console.error(`❌ Erreur déplacement ${gameFile.name}:`, error.message);
+        }
+      }
+    }
+
+    // 🧹 ÉTAPE 3: Nettoie les dossiers vides (mais pas la racine)
+    function cleanEmptyDirectories(dirPath, isRoot = false) {
+      if (isRoot) return; // Ne supprime jamais la racine
+      
+      try {
+        const items = fs.readdirSync(dirPath);
+        
+        // Nettoie d'abord les sous-dossiers
+        for (const item of items) {
+          const itemPath = path.join(dirPath, item);
+          try {
+            const stat = fs.statSync(itemPath);
+            if (stat.isDirectory()) {
+              cleanEmptyDirectories(itemPath, false);
+            }
+          } catch (error) {
+            // Ignore les erreurs
+          }
+        }
+        
+        // Vérifie si le dossier est maintenant vide
+        const remainingItems = fs.readdirSync(dirPath);
+        if (remainingItems.length === 0) {
+          fs.rmdirSync(dirPath);
+          console.log(`🗑️ Dossier vide supprimé: ${path.relative(modPath, dirPath)}`);
+        }
+      } catch (error) {
+        // Ignore les erreurs de nettoyage
+      }
+    }
+
+    // Nettoie les dossiers vides, en partant des sous-dossiers
+    try {
+      const rootItems = fs.readdirSync(modPath);
+      for (const item of rootItems) {
+        const itemPath = path.join(modPath, item);
+        try {
+          const stat = fs.statSync(itemPath);
+          if (stat.isDirectory()) {
+            cleanEmptyDirectories(itemPath, false);
+          }
+        } catch (error) {
+          // Ignore les erreurs
+        }
+      }
+    } catch (error) {
+      console.error('❌ Erreur nettoyage:', error.message);
+    }
+
+    // 📊 RÉSULTAT
+    if (hasChanges) {
+      console.log(`✅ Structure corrigée: ${movedFiles.length} fichier(s) déplacé(s)`);
+      return { 
+        success: true, 
+        hasChanges: true, 
+        movedFiles: movedFiles,
+        message: `${movedFiles.length} fichier(s) de jeu déplacé(s) vers la racine`
+      };
+    } else {
+      console.log('ℹ️ Tous les fichiers de jeu sont déjà à la racine');
+      return { 
+        success: true, 
+        hasChanges: false, 
+        message: 'Tous les fichiers de jeu sont déjà correctement placés'
+      };
+    }
     
   } catch (error) {
     console.error('❌ Erreur lors de la correction de structure:', error);
-    return { success: false, hasChanges: false, error: error.message };
+    return { 
+      success: false, 
+      hasChanges: false, 
+      error: error.message 
+    };
   }
 }
 
