@@ -368,34 +368,45 @@ function setupContextMenus() {
           menu.remove();
           return;
         }
-        // Corriger la structure du mod
+        // 🆕 CORRIGER LA STRUCTURE DU MOD - VERSION AMÉLIORÉE
         if (evt.target.dataset.action === 'fix-structure') {
-          showNotification("🔧 Analysis of current Mod structure...", false);
+          showNotification("🔧 Analyse et correction de la structure du mod...", false);
           
           try {
-            console.log('🔧 Structure correction for:', modPath);
+            console.log('🔧 Demande correction structure pour:', modPath);
             
-            // Appel de la fonction de correction
+            // Appel de la fonction de correction améliorée
             const result = window.electronAPI.flattenModDirectory(modPath);
             
-            console.log('📊 Correction result:', result);
+            console.log('📊 Résultat correction:', result);
             
             if (result && result.success) {
               if (result.hasChanges) {
-                showNotification(`✅ Corrected structure for "${modName}" !`, false);
-                // Rafraîchit la liste des mods
-                setTimeout(() => window.loadModsPage(), 1000);
+                const message = result.movedFiles && result.movedFiles.length > 0 
+                  ? `✅ Structure corrigée ! ${result.movedFiles.length} fichier(s) déplacé(s) vers la racine`
+                  : `✅ Structure corrigée pour "${modName}" !`;
+                
+                showNotification(message, false);
+                
+                // Affiche les détails dans la console
+                if (result.movedFiles && result.movedFiles.length > 0) {
+                  console.log('📄 Fichiers déplacés:', result.movedFiles);
+                }
+                
+                // Rafraîchit la liste des mods après un délai
+                setTimeout(() => window.loadModsPage(), 1500);
               } else {
-                showNotification(`ℹ️ Structure already correct for "${modName}"`, false);
+                const message = result.message || `ℹ️ Structure déjà correcte pour "${modName}"`;
+                showNotification(message, false);
               }
             } else {
-              const errorMsg = result && result.error ? result.error : 'Unknown error';
-              showNotification(`❌ Error: ${errorMsg}`, true);
-              console.error('Detailed error:', result);
+              const errorMsg = result && result.error ? result.error : 'Erreur inconnue';
+              showNotification(`❌ Erreur: ${errorMsg}`, true);
+              console.error('Détails erreur:', result);
             }
           } catch (error) {
-            console.error('❌ Exception during correction:', error);
-            showNotification(`❌ Unexpected error: ${error.message}`, true);
+            console.error('❌ Exception pendant correction:', error);
+            showNotification(`❌ Erreur inattendue: ${error.message}`, true);
           }
           
           menu.remove();
