@@ -315,6 +315,119 @@ function installModVariant(modPath, chosenVariant, allVariants) {
   }
 }
 
+// 🆕 FONCTION POUR INSTALLER PLUSIEURS VARIANTES (MODS MODULAIRES)
+function installMultipleVariants(modPath, selectedVariants, allVariants) {
+  try {
+    console.log('⚙️ Installation de variants multiples:', selectedVariants.map(v => v.name));
+
+    // Patterns pour détecter la priorité des composants
+    const requiredPatterns = [
+      /^(core|base|main|principal|required)$/i
+    ];
+
+    // Trie les variants par priorité (requis en premier, puis par taille)
+    const sortedVariants = selectedVariants.sort((a, b) => {
+      const aRequired = requiredPatterns.some(pattern => pattern.test(a.name));
+      const bRequired = requiredPatterns.some(pattern => pattern.test(b.name));
+      
+      if (aRequired && !bRequired) return -1;
+      if (!aRequired && bRequired) return 1;
+      return b.sizeBytes - a.sizeBytes; // Plus gros en premier
+    });
+
+    // Collecte tous les fichiers à installer avec gestion des conflits
+    const filesToInstall = new Map(); // chemin relatif -> { source, priority, variant }
+    
+    for (let i = 0; i < sortedVariants.length; i++) {
+      const variant = sortedVariants[i];
+      const priority = sortedVariants.length - i; // Plus prioritaire = plus haut
+
+      console.log(`📦 Traitement variant "${variant.name}" (priorité: ${priority})`);
+      
+      collectVariantFiles(variant.path, '', filesToInstall, priority, variant.name);
+    }
+
+    // Installe les fichiers dans l'ordre de priorité
+    let installedCount = 0;
+    for (const [relativePath, fileInfo] of filesToInstall) {
+      const sourcePath = fileInfo.source;
+      const destPath = path.join(modPath, relativePath);
+      
+      try {
+        // Crée le dossier de destination si nécessaire
+        const destDir = path.dirname(destPath);
+        if (!fs.existsSync(destDir)) {
+          fs.mkdirSync(destDir, { recursive: true });
+        }
+
+        // Copie le fichier
+        fs.copyFileSync(sourcePath, destPath);
+        installedCount++;
+        console.log(`✅ Installé: ${relativePath} (de ${fileInfo.variant})`);
+        
+      } catch (error) {
+        console.error(`❌ Erreur installation ${relativePath}:`, error.message);
+      }
+    }
+
+    // Supprime tous les dossiers de variants originaux
+    for (const variant of allVariants) {
+      try {
+        if (fs.existsSync(variant.path)) {
+          rimraf.sync(variant.path);
+          console.log(`🗑️ Dossier variant supprimé: ${variant.name}`);
+        }
+      } catch (error) {
+        console.error(`❌ Erreur suppression ${variant.name}:`, error.message);
+      }
+    }
+
+    console.log(`✅ Installation multiple terminée: ${installedCount} fichiers installés`);
+    return { 
+      success: true, 
+      installedVariants: selectedVariants.map(v => v.name),
+      fileCount: installedCount 
+    };
+
+  } catch (error) {
+    console.error('❌ Erreur installation multiple:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// 🆕 FONCTION POUR COLLECTER RÉCURSIVEMENT TOUS LES FICHIERS D'UN VARIANT
+function collectVariantFiles(variantPath, relativePath, filesToInstall, priority, variantName) {
+  try {
+    const items = fs.readdirSync(path.join(variantPath, relativePath));
+
+    for (const item of items) {
+      const itemPath = path.join(variantPath, relativePath, item);
+      const relativeItemPath = path.join(relativePath, item);
+      const stat = fs.statSync(itemPath);
+
+      if (stat.isDirectory()) {
+        // Récursion pour les sous-dossiers
+        collectVariantFiles(variantPath, relativeItemPath, filesToInstall, priority, variantName);
+      } else if (stat.isFile()) {
+        // Ajoute le fichier s'il n'existe pas ou si la priorité est plus élevée
+        const normalizedPath = relativeItemPath.replace(/\\/g, '/');
+        
+        if (!filesToInstall.has(normalizedPath) || filesToInstall.get(normalizedPath).priority < priority) {
+          filesToInstall.set(normalizedPath, {
+            source: itemPath,
+            priority: priority,
+            variant: variantName
+          });
+        } else {
+          console.log(`⚠️ Conflit fichier: ${normalizedPath} - priorité ${filesToInstall.get(normalizedPath).variant} > ${variantName}`);
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`❌ Erreur collecte fichiers ${variantName}:`, error.message);
+  }
+}
+
 // Fonction utilitaire pour formater les tailles
 function formatBytes(bytes) {
   if (bytes === 0) return '0 B';
@@ -369,6 +482,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   installModVariant: (modPath, chosenVariant, allVariants) => {
     return installModVariant(modPath, chosenVariant, allVariants);
+  },
+
+  // 🆕 FONCTION POUR INSTALLER PLUSIEURS VARIANTES
+  installMultipleVariants: (modPath, selectedVariants, allVariants) => {
+    return installMultipleVariants(modPath, selectedVariants, allVariants);
   },
 
   extractArchive: async (archivePath, destPath) => {
