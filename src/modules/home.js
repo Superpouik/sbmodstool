@@ -176,11 +176,6 @@ function createModCard(mod, index) {
   // Formatage des téléchargements
   const downloads = formatDownloads(mod.downloads || 0);
   
-  // Limite la longueur du résumé
-  const summary = mod.summary ? 
-    (mod.summary.length > 100 ? mod.summary.substring(0, 97) + '...' : mod.summary) : 
-    'Aucune description disponible';
-  
   card.innerHTML = `
     <div class="mod-image-container">
       <img src="${mod.picture_url || 'https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg'}" 
@@ -192,9 +187,7 @@ function createModCard(mod, index) {
     </div>
     
     <div class="mod-info">
-      <div class="mod-name" title="${mod.name}">${mod.name}</div>
-      <div class="mod-author">👤 ${mod.author || 'Auteur inconnu'}</div>
-      <div class="mod-summary" title="${mod.summary || ''}">${summary}</div>
+      <div class="mod-name" title="${mod.name}" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; height: 1.3em;">${mod.name}</div>
     </div>
     
     <div class="mod-actions">
