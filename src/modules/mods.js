@@ -459,6 +459,8 @@ function setupModToggleHandlers() {
 // Expose ModNotesManager globalement
 window.ModNotesManager = ModNotesManager;
 
+// Dans la fonction setupContextMenus() du fichier mods.js, remplacer la partie du menu contextuel par :
+
 function setupContextMenus() {
   const modsPath = localStorage.getItem('mods_path') || '';
   const disabledModsPath = localStorage.getItem('disabled_mods_path') || '';
@@ -479,13 +481,15 @@ function setupContextMenus() {
       // Supprime les anciens menus contextuels s'il y en a
       document.querySelectorAll('.context-menu').forEach(m => m.remove());
 
-      // Crée le menu contextuel
+      // Crée le menu contextuel AMÉLIORÉ
       const menu = document.createElement('div');
       menu.className = 'context-menu';
       menu.innerHTML = `
         <div class="context-item" data-action="open">📂 Ouvrir le dossier</div>
         <div class="context-item" data-action="add-preview">🖼️ Ajouter miniature</div>
+        <div class="context-separator"></div>
         <div class="context-item" data-action="fix-structure">🔧 Corriger la structure</div>
+        <div class="context-item" data-action="aggressive-fix" style="color:#ff9800;">⚡ Correction agressive</div>
         <div class="context-separator"></div>
         <div class="context-item" data-action="edit-note">
           ${hasNote ? '📝 Modifier la note' : '📝 Ajouter une note'}
@@ -503,6 +507,7 @@ function setupContextMenus() {
         if (evt.target.dataset.action === 'open') {
           window.electronAPI.openFolder(modPath);
         }
+        
         // Ajouter une miniature (popup)
         if (evt.target.dataset.action === 'add-preview') {
           Popup.askMiniature(modName, result => {
@@ -526,25 +531,25 @@ function setupContextMenus() {
           menu.remove();
           return;
         }
-        // Corriger la structure du mod
+        
+        // 🔧 CORRECTION STANDARD
         if (evt.target.dataset.action === 'fix-structure') {
           showNotification("🔧 Analyse de la structure en cours...", false);
           
           try {
             console.log('🔧 Correction de structure pour:', modPath);
             
-            // Appel de la fonction de correction
             const result = window.electronAPI.flattenModDirectory(modPath);
-            
             console.log('📊 Résultat correction:', result);
             
             if (result && result.success) {
               if (result.hasChanges) {
-                showNotification(`✅ Structure corrigée pour "${modName}" !`, false);
-                // Rafraîchit la liste des mods
+                const message = result.message || `Structure corrigée pour "${modName}"`;
+                showNotification(`✅ ${message}`, false);
                 setTimeout(() => window.loadModsPage(), 1000);
               } else {
-                showNotification(`ℹ️ Structure déjà correcte pour "${modName}"`, false);
+                const message = result.message || `Structure déjà correcte pour "${modName}"`;
+                showNotification(`ℹ️ ${message}`, false);
               }
             } else {
               const errorMsg = result && result.error ? result.error : 'Erreur inconnue';
@@ -553,6 +558,39 @@ function setupContextMenus() {
             }
           } catch (error) {
             console.error('❌ Exception durant la correction:', error);
+            showNotification(`❌ Erreur inattendue : ${error.message}`, true);
+          }
+          
+          menu.remove();
+          return;
+        }
+        
+        // ⚡ CORRECTION AGRESSIVE (NOUVELLE OPTION)
+        if (evt.target.dataset.action === 'aggressive-fix') {
+          showNotification("⚡ Correction agressive en cours...", false);
+          
+          try {
+            console.log('⚡ Correction agressive pour:', modPath);
+            
+            const result = window.electronAPI.aggressiveFlattenModDirectory(modPath);
+            console.log('📊 Résultat correction agressive:', result);
+            
+            if (result && result.success) {
+              if (result.hasChanges) {
+                const message = result.message || `Structure corrigée agressivement pour "${modName}"`;
+                showNotification(`⚡ ${message}`, false);
+                setTimeout(() => window.loadModsPage(), 1000);
+              } else {
+                const message = result.message || `Aucune correction nécessaire pour "${modName}"`;
+                showNotification(`ℹ️ ${message}`, false);
+              }
+            } else {
+              const errorMsg = result && result.error ? result.error : 'Erreur inconnue';
+              showNotification(`❌ Erreur agressive : ${errorMsg}`, true);
+              console.error('Erreur détaillée:', result);
+            }
+          } catch (error) {
+            console.error('❌ Exception durant la correction agressive:', error);
             showNotification(`❌ Erreur inattendue : ${error.message}`, true);
           }
           
