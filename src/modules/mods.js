@@ -76,7 +76,6 @@ const ModNotesManager = {
 
 window.loadModsPage = function() {
   const modsContent = document.getElementById('mods-content');
-  modsContent.innerHTML = '<div style="text-align:center">Loading Mods...</div>';
 
   const modsPath = localStorage.getItem('mods_path') || '';
   const disabledModsPath = localStorage.getItem('disabled_mods_path') || '';
@@ -94,37 +93,38 @@ window.loadModsPage = function() {
     return `file://${basePath.replace(/\\/g, '/')}/${modName}/preview.jpg`;
   }
 
-  // 🆕 NOUVELLE FONCTION POUR CRÉER UNE CARTE DE MOD (style Home)
+  // 🆕 NOUVELLE FONCTION POUR CRÉER UNE CARTE DE MOD (avec badges style capture d'écran)
   function createModCard(modName, enabled, basePath) {
     // Récupère la note du mod
     const note = ModNotesManager.getNote(modName);
     const hasNote = note && note.text;
     const notePreview = hasNote ? ModNotesManager.formatNotePreview(note.text, 60) : '';
     
-    // Couleur et statut
-    const statusColor = enabled ? '#28d47b' : '#ff6b35';
-    const statusIcon = enabled ? '✅' : '⚠️';
-    const statusText = enabled ? 'Actif' : 'Désactivé';
+    // Badge style capture d'écran
+    const badgeClass = enabled ? 'active-badge' : 'inactive-badge';
+    const badgeText = enabled ? 'Active' : 'Inactive';
+    const badgeColor = enabled ? '#48ffd3' : '#ff4343'; // Cyan pour actifs, rouge pour inactifs
+    
+    // Bouton avec couleurs spécifiées
     const buttonText = enabled ? 'Désactiver' : 'Activer';
     const buttonClass = enabled ? 'deactivate-btn' : 'activate-btn';
     
     return `
-      <div class="home-mod-card mod-card-new" data-mod="${modName}" data-enabled="${enabled}">
-        <!-- Image avec overlay de statut -->
+      <div class="home-mod-card mod-card-flex" data-mod="${modName}" data-enabled="${enabled}">
+        <!-- Image avec badge de statut -->
         <div class="mod-image-container">
           <img src="${getPreviewPath(basePath, modName)}" alt="miniature"
                onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg';">
           
-          <!-- Pastille de statut en haut à droite -->
-          <div class="mod-status-overlay">
-            <span class="status-badge" style="background: ${statusColor}; color: #fff;">
-              ${statusIcon} ${statusText}
-            </span>
+          <!-- Badge style capture d'écran -->
+          <div class="mod-status-badge ${badgeClass}">
+            <span class="status-dot" style="background: ${badgeColor};"></span>
+            ${badgeText}
           </div>
         </div>
         
         <!-- Informations du mod -->
-        <div class="mod-info">
+        <div class="mod-info mod-info-flex">
           <div class="mod-name" title="${modName}">${modName}</div>
           
           ${hasNote ? `
@@ -134,10 +134,9 @@ window.loadModsPage = function() {
           ` : ''}
         </div>
         
-        <!-- Actions -->
-        <div class="mod-actions">
+        <!-- Actions alignées en bas -->
+        <div class="mod-actions mod-actions-bottom">
           <button class="mod-action-btn ${buttonClass}" data-mod="${modName}" data-enabled="${enabled}">
-            <span class="btn-icon">${enabled ? '⏸️' : '▶️'}</span>
             <span class="btn-text">${buttonText}</span>
           </button>
         </div>
@@ -145,21 +144,11 @@ window.loadModsPage = function() {
     `;
   }
 
-  // Interface avec header harmonisé et grille style Home
+  // Interface avec deux sections séparées (Active/Disabled) - Header supprimé pour éviter le doublon
   modsContent.innerHTML = `
-    <!-- Header harmonisé -->
-    <div class="mods-header">
-      <div class="mods-title">
-        <h2 style="margin: 0; color: #82eefd;">🗂️ Mods Installés</h2>
-        <p style="color: #888; margin: 5px 0 0 0;">Gérez vos mods installés avec facilité</p>
-      </div>
-      <div class="mods-stats">
-        <span id="active-count">${activeMods.length}</span> actifs • 
-        <span id="disabled-count">${disabledMods.length}</span> désactivés
-      </div>
-    </div>
+    <!-- Header supprimé car déjà présent dans index.html -->
 
-    <!-- Barre de recherche -->
+    <!-- Barre de recherche harmonisée -->
     <div class="search-container" style="margin-bottom: 30px; max-width: 500px;">
       <input type="text" id="mod-search" placeholder="🔍 Rechercher un mod..." />
       <button id="clear-search" class="clear-btn" title="Effacer">✕</button>
@@ -168,7 +157,7 @@ window.loadModsPage = function() {
     <!-- Sections avec grilles harmonisées -->
     <div class="mods-sections">
       <!-- Section Mods Actifs -->
-      <div class="mods-section" id="active-section">
+      <div class="home-section" id="active-section">
         <div class="section-header">
           <h3>🟢 Mods Actifs (<span id="active-visible">${activeMods.length}</span>)</h3>
           <p>Mods actuellement utilisés par le jeu</p>
@@ -179,7 +168,7 @@ window.loadModsPage = function() {
       </div>
 
       <!-- Section Mods Désactivés -->
-      <div class="mods-section" id="disabled-section">
+      <div class="home-section" id="disabled-section">
         <div class="section-header">
           <h3>🔴 Mods Désactivés (<span id="disabled-visible">${disabledMods.length}</span>)</h3>
           <p>Mods installés mais non utilisés</p>
@@ -189,6 +178,122 @@ window.loadModsPage = function() {
         </div>
       </div>
     </div>
+
+    <!-- Styles CSS pour badges et alignement -->
+    <style>
+      /* Badges style capture d'écran avec transparence et centrage */
+      .mod-status-badge {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 6px 12px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        text-align: center;
+        min-width: 70px;
+      }
+      
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+      }
+      
+      .active-badge {
+        background: linear-gradient(135deg, rgba(72, 255, 211, 0.45), rgba(130, 238, 253, 0.45));
+        color: white;
+        border: 1px solid rgba(72, 255, 211, 0.6);
+      }
+      
+      .inactive-badge {
+        background: rgba(255, 67, 67, 0.45);
+        color: white;
+        border: 1px solid rgba(255, 67, 67, 0.6);
+      }
+      
+      /* Cartes avec alignement flexible */
+      .mod-card-flex {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+      
+      .mod-info-flex {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      
+      .mod-actions-bottom {
+        margin-top: auto;
+        padding-top: 8px;
+      }
+      
+      /* Couleurs des boutons avec effets de survol et transparence */
+      .mod-action-btn {
+        width: 100%;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 16px;
+        font-size: 0.9em;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 0.2s ease, transform 0.1s ease;
+        color: white;
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      
+      .mod-action-btn:hover {
+        transform: translateY(-1px);
+      }
+      
+      /* Bouton désactiver (mods actifs) - cyan/turquoise transparent par défaut, rouge transparent au survol */
+      .deactivate-btn {
+        background: linear-gradient(135deg, rgba(72, 255, 211, 0.45), rgba(130, 238, 253, 0.45));
+        border: 1px solid rgba(72, 255, 211, 0.6);
+      }
+      
+      .deactivate-btn:hover {
+        background: rgba(255, 67, 67, 0.45) !important;
+        border: 1px solid rgba(255, 67, 67, 0.6) !important;
+      }
+      
+      /* Bouton activer (mods désactivés) - rouge transparent par défaut, cyan/turquoise transparent au survol */
+      .activate-btn {
+        background: rgba(255, 67, 67, 0.45);
+        border: 1px solid rgba(255, 67, 67, 0.6);
+      }
+      
+      .activate-btn:hover {
+        background: linear-gradient(135deg, rgba(72, 255, 211, 0.45), rgba(130, 238, 253, 0.45)) !important;
+        border: 1px solid rgba(72, 255, 211, 0.6) !important;
+      }
+      
+      /* Animation de traitement */
+      .mod-action-btn.processing {
+        background: #666 !important;
+        cursor: wait;
+      }
+      
+      .mod-action-btn.processing:hover {
+        background: #666 !important;
+        transform: none;
+      }
+    </style>
   `;
 
   // Initialisation de la recherche
@@ -245,7 +350,7 @@ function filterMods(query) {
   allModsData.active.forEach(mod => {
     const card = activeGrid.querySelector(`[data-mod="${mod.name}"]`);
     if (card) {
-      // 🆕 Recherche aussi dans les notes
+      // Recherche aussi dans les notes
       const note = ModNotesManager.getNote(mod.name);
       const noteText = note ? note.text.toLowerCase() : '';
       
@@ -259,7 +364,7 @@ function filterMods(query) {
   allModsData.disabled.forEach(mod => {
     const card = disabledGrid.querySelector(`[data-mod="${mod.name}"]`);
     if (card) {
-      // 🆕 Recherche aussi dans les notes
+      // Recherche aussi dans les notes
       const note = ModNotesManager.getNote(mod.name);
       const noteText = note ? note.text.toLowerCase() : '';
       
@@ -331,15 +436,22 @@ function setupModToggleHandlers() {
         dest = `${modsPath}/${modName}`;
       }
 
+      // Animation du bouton pendant le traitement
+      btn.classList.add('processing');
+      btn.textContent = 'Traitement...';
+
       const moved = await window.electronAPI.moveFolder(src, dest);
 
       if (!moved) {
         showNotification("Erreur lors du déplacement du mod !", true);
+        // Restaure le bouton en cas d'erreur
+        btn.classList.remove('processing');
+        btn.textContent = isEnabled ? 'Désactiver' : 'Activer';
       } else {
         showNotification(isEnabled ? "Mod désactivé !" : "Mod activé !");
+        // Recharge la page pour refléter les changements
+        setTimeout(() => window.loadModsPage(), 500);
       }
-
-      window.loadModsPage(); // Refresh la grid
     });
   });
 }
@@ -351,7 +463,7 @@ function setupContextMenus() {
   const modsPath = localStorage.getItem('mods_path') || '';
   const disabledModsPath = localStorage.getItem('disabled_mods_path') || '';
 
-  document.getElementById('mods-content').querySelectorAll('.mod-card-new').forEach(card => {
+  document.getElementById('mods-content').querySelectorAll('.mod-card-flex').forEach(card => {
     card.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       // Récupère les infos du mod
