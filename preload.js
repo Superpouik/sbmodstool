@@ -8,147 +8,152 @@ const { extractFull } = require('node-7z');
 const https = require('https');
 const http = require('http');
 
-// 🔧 FONCTION UTILITAIRE POUR CORRIGER LA STRUCTURE DES DOSSIERS
+// 🔧 FONCTION CORRIGÉE POUR CORRIGER LA STRUCTURE DES DOSSIERS
 function flattenModDirectory(modPath) {
   try {
     console.log('🔧 Vérification structure du mod:', modPath);
     
     if (!fs.existsSync(modPath)) {
       console.log('❌ Dossier mod inexistant:', modPath);
-      return false;
+      return { success: false, error: 'Dossier inexistant' };
     }
 
     let hasChanges = false;
-    let iterations = 0;
-    const maxIterations = 5; // Évite les boucles infinies
-
-    // Fonction récursive pour aplatir la structure
-    function flattenRecursive(currentPath) {
-      if (iterations >= maxIterations) {
-        console.log('⚠️ Limite d\'itérations atteinte');
-        return false;
-      }
-
-      iterations++;
-      console.log(`🔄 Itération ${iterations} sur:`, currentPath);
-
-      const items = fs.readdirSync(currentPath);
-      const files = items.filter(item => {
-        try {
-          return fs.statSync(path.join(currentPath, item)).isFile();
-        } catch {
-          return false;
-        }
-      });
-      const folders = items.filter(item => {
-        try {
-          return fs.statSync(path.join(currentPath, item)).isDirectory();
-        } catch {
-          return false;
-        }
-      });
-
-      console.log(`📁 Trouvé: ${files.length} fichiers, ${folders.length} dossiers`);
-
-      // Cas 1: Aucun fichier à la racine, un seul sous-dossier
-      if (files.length === 0 && folders.length === 1) {
-        const subFolder = folders[0];
-        const subFolderPath = path.join(currentPath, subFolder);
+    const gameFileExtensions = ['.pak', '.ucas', '.utoc'];
+    
+    // 🆕 Scanner récursivement pour trouver tous les fichiers de jeu
+    const gameFilesFound = [];
+    
+    function scanForGameFiles(dirPath, relativePath = '') {
+      try {
+        const items = fs.readdirSync(dirPath);
         
-        console.log('📦 Déplacement du contenu de:', subFolder);
-        
-        try {
-          // Liste tout le contenu du sous-dossier
-          const subItems = fs.readdirSync(subFolderPath);
-          
-          // Déplace chaque élément vers la racine
-          for (const item of subItems) {
-            const srcPath = path.join(subFolderPath, item);
-            const destPath = path.join(currentPath, item);
-            
-            // Évite les conflits de noms
-            if (fs.existsSync(destPath)) {
-              console.log(`⚠️ Conflit détecté pour: ${item}, ignoré`);
-              continue;
-            }
-            
-            try {
-              fs.renameSync(srcPath, destPath);
-              console.log(`✅ Déplacé: ${item}`);
-              hasChanges = true;
-            } catch (error) {
-              console.error(`❌ Erreur déplacement ${item}:`, error.message);
-            }
-          }
-          
-          // Vérifie si le dossier est maintenant vide
-          const remainingItems = fs.readdirSync(subFolderPath);
-          if (remainingItems.length === 0) {
-            try {
-              fs.rmdirSync(subFolderPath);
-              console.log(`🗑️ Dossier vide supprimé: ${subFolder}`);
-            } catch (error) {
-              console.error(`❌ Erreur suppression dossier ${subFolder}:`, error.message);
-            }
-          }
-          
-          // Vérifie à nouveau récursivement
-          return flattenRecursive(currentPath);
-          
-        } catch (error) {
-          console.error('❌ Erreur lors du traitement du sous-dossier:', error);
-          return false;
-        }
-      }
-      
-      // Cas 2: Plusieurs dossiers mais certains peuvent être des wrappers inutiles
-      else if (folders.length > 0) {
-        console.log('🔍 Vérification des sous-dossiers suspects...');
-        
-        // Cherche des dossiers avec des noms suspects (wrappers)
-        for (const folder of folders) {
-          const folderPath = path.join(currentPath, folder);
+        for (const item of items) {
+          const itemPath = path.join(dirPath, item);
+          const relativeItemPath = path.join(relativePath, item);
           
           try {
-            const subItems = fs.readdirSync(folderPath);
-            const subFiles = subItems.filter(item => {
-              try {
-                return fs.statSync(path.join(folderPath, item)).isFile();
-              } catch {
-                return false;
-              }
-            });
-            const subFolders = subItems.filter(item => {
-              try {
-                return fs.statSync(path.join(folderPath, item)).isDirectory();
-              } catch {
-                return false;
-              }
-            });
+            const stat = fs.statSync(itemPath);
             
-            // Si le dossier ne contient qu'un seul sous-dossier et aucun fichier
-            if (subFiles.length === 0 && subFolders.length === 1) {
-              console.log('🎯 Dossier wrapper détecté:', folder);
-              return flattenRecursive(folderPath);
+            if (stat.isFile()) {
+              const ext = path.extname(item).toLowerCase();
+              if (gameFileExtensions.includes(ext)) {
+                gameFilesFound.push({
+                  fullPath: itemPath,
+                  relativePath: relativeItemPath,
+                  fileName: item,
+                  isAtRoot: relativePath === ''
+                });
+              }
+            } else if (stat.isDirectory()) {
+              // Scan récursif des sous-dossiers
+              scanForGameFiles(itemPath, relativeItemPath);
             }
           } catch (error) {
-            console.error(`❌ Erreur analyse dossier ${folder}:`, error.message);
+            console.error(`❌ Erreur lecture item ${item}:`, error.message);
           }
         }
+      } catch (error) {
+        console.error(`❌ Erreur scan dossier ${dirPath}:`, error.message);
       }
-      
-      return true;
     }
 
-    const success = flattenRecursive(modPath);
+    // Scanner tous les fichiers de jeu
+    scanForGameFiles(modPath);
     
+    if (gameFilesFound.length === 0) {
+      console.log('ℹ️ Aucun fichier de jeu trouvé dans ce mod');
+      return { success: true, hasChanges: false, message: 'Aucun fichier de jeu trouvé' };
+    }
+
+    console.log(`📊 Trouvé ${gameFilesFound.length} fichier(s) de jeu`);
+    
+    // Vérifier si tous les fichiers de jeu sont déjà à la racine
+    const filesAtRoot = gameFilesFound.filter(file => file.isAtRoot);
+    const filesInSubdirs = gameFilesFound.filter(file => !file.isAtRoot);
+    
+    console.log(`📁 À la racine: ${filesAtRoot.length}, Dans sous-dossiers: ${filesInSubdirs.length}`);
+    
+    if (filesInSubdirs.length === 0) {
+      console.log('ℹ️ Tous les fichiers de jeu sont déjà à la racine');
+      return { success: true, hasChanges: false, message: 'Structure déjà correcte' };
+    }
+
+    // 🔧 CORRECTION : Déplacer tous les fichiers de jeu vers la racine
+    console.log('🚀 Déplacement des fichiers de jeu vers la racine...');
+    
+    for (const file of filesInSubdirs) {
+      const sourcePath = file.fullPath;
+      const destPath = path.join(modPath, file.fileName);
+      
+      try {
+        // Vérifier s'il y a un conflit de nom
+        let finalDestPath = destPath;
+        let counter = 1;
+        
+        while (fs.existsSync(finalDestPath)) {
+          const nameWithoutExt = path.parse(file.fileName).name;
+          const ext = path.parse(file.fileName).ext;
+          finalDestPath = path.join(modPath, `${nameWithoutExt}_${counter}${ext}`);
+          counter++;
+        }
+        
+        // Déplacer le fichier
+        fs.renameSync(sourcePath, finalDestPath);
+        console.log(`✅ Déplacé: ${file.relativePath} → ${path.basename(finalDestPath)}`);
+        hasChanges = true;
+        
+      } catch (error) {
+        console.error(`❌ Erreur déplacement ${file.fileName}:`, error.message);
+      }
+    }
+
+    // 🧹 NETTOYAGE : Supprimer les dossiers vides après déplacement
+    function cleanupEmptyDirectories(dirPath) {
+      try {
+        const items = fs.readdirSync(dirPath);
+        
+        // Nettoie récursivement les sous-dossiers d'abord
+        for (const item of items) {
+          const itemPath = path.join(dirPath, item);
+          try {
+            const stat = fs.statSync(itemPath);
+            if (stat.isDirectory()) {
+              cleanupEmptyDirectories(itemPath);
+            }
+          } catch (error) {
+            // Ignore les erreurs de lecture
+          }
+        }
+        
+        // Vérifie si le dossier est maintenant vide
+        const remainingItems = fs.readdirSync(dirPath);
+        if (remainingItems.length === 0 && dirPath !== modPath) {
+          try {
+            fs.rmdirSync(dirPath);
+            console.log(`🗑️ Dossier vide supprimé: ${path.relative(modPath, dirPath)}`);
+          } catch (error) {
+            console.error(`⚠️ Impossible de supprimer ${dirPath}:`, error.message);
+          }
+        }
+        
+      } catch (error) {
+        // Ignore les erreurs de nettoyage
+      }
+    }
+
+    if (hasChanges) {
+      console.log('🧹 Nettoyage des dossiers vides...');
+      cleanupEmptyDirectories(modPath);
+    }
+
     if (hasChanges) {
       console.log('✅ Structure du mod corrigée avec succès');
+      return { success: true, hasChanges, message: `${filesInSubdirs.length} fichier(s) déplacé(s) vers la racine` };
     } else {
       console.log('ℹ️ Aucune correction nécessaire');
+      return { success: true, hasChanges: false, message: 'Aucune correction nécessaire' };
     }
-    
-    return { success, hasChanges };
     
   } catch (error) {
     console.error('❌ Erreur lors de la correction de structure:', error);
@@ -437,6 +442,127 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
+// 🆕 FONCTION DE CORRECTION AGRESSIVE
+function aggressiveFlattenModDirectory(modPath) {
+  try {
+    console.log('⚡ Correction agressive de la structure:', modPath);
+    
+    if (!fs.existsSync(modPath)) {
+      return { success: false, error: 'Dossier inexistant' };
+    }
+
+    const gameFileExtensions = ['.pak', '.ucas', '.utoc'];
+    let hasChanges = false;
+    let filesMoved = 0;
+    
+    // Fonction pour remonter TOUS les fichiers de jeu à la racine
+    function moveAllGameFilesToRoot(currentDir, targetDir = modPath) {
+      const items = fs.readdirSync(currentDir);
+      
+      for (const item of items) {
+        const itemPath = path.join(currentDir, item);
+        
+        try {
+          const stat = fs.statSync(itemPath);
+          
+          if (stat.isFile()) {
+            const ext = path.extname(item).toLowerCase();
+            if (gameFileExtensions.includes(ext)) {
+              // C'est un fichier de jeu, le déplacer vers la racine
+              const destPath = path.join(targetDir, item);
+              
+              // Gestion des conflits de noms
+              let finalDest = destPath;
+              let counter = 1;
+              while (fs.existsSync(finalDest)) {
+                const nameBase = path.parse(item).name;
+                const ext = path.parse(item).ext;
+                finalDest = path.join(targetDir, `${nameBase}_${counter}${ext}`);
+                counter++;
+              }
+              
+              try {
+                fs.renameSync(itemPath, finalDest);
+                console.log(`✅ Remonté: ${path.relative(modPath, itemPath)} → ${path.basename(finalDest)}`);
+                hasChanges = true;
+                filesMoved++;
+              } catch (error) {
+                console.error(`❌ Erreur remontée ${item}:`, error.message);
+              }
+            }
+          } else if (stat.isDirectory()) {
+            // Traitement récursif des sous-dossiers
+            moveAllGameFilesToRoot(itemPath, targetDir);
+          }
+        } catch (error) {
+          console.error(`❌ Erreur traitement ${item}:`, error.message);
+        }
+      }
+    }
+    
+    // Remonte tous les fichiers de jeu
+    moveAllGameFilesToRoot(modPath);
+    
+    // Nettoyage des dossiers vides
+    function cleanupEmptyDirs(dirPath) {
+      if (dirPath === modPath) return;
+      
+      try {
+        const items = fs.readdirSync(dirPath);
+        
+        // Nettoie les sous-dossiers d'abord
+        for (const item of items) {
+          const itemPath = path.join(dirPath, item);
+          if (fs.statSync(itemPath).isDirectory()) {
+            cleanupEmptyDirs(itemPath);
+          }
+        }
+        
+        // Vérifie si vide maintenant
+        const remainingItems = fs.readdirSync(dirPath);
+        if (remainingItems.length === 0) {
+          fs.rmdirSync(dirPath);
+          console.log(`🗑️ Dossier vide supprimé: ${path.relative(modPath, dirPath)}`);
+        }
+      } catch (error) {
+        // Ignore les erreurs de nettoyage
+      }
+    }
+    
+    // Collecte et nettoie tous les dossiers
+    const allDirs = [];
+    function collectDirs(dirPath) {
+      try {
+        const items = fs.readdirSync(dirPath);
+        for (const item of items) {
+          const itemPath = path.join(dirPath, item);
+          if (fs.statSync(itemPath).isDirectory()) {
+            allDirs.push(itemPath);
+            collectDirs(itemPath);
+          }
+        }
+      } catch (error) {
+        // Ignore les erreurs
+      }
+    }
+    
+    collectDirs(modPath);
+    
+    // Nettoie du plus profond au plus superficiel
+    allDirs.reverse().forEach(cleanupEmptyDirs);
+    
+    return { 
+      success: true, 
+      hasChanges, 
+      message: hasChanges ? `${filesMoved} fichier(s) remonté(s) vers la racine (mode agressif)` : 'Aucun fichier à déplacer'
+    };
+    
+  } catch (error) {
+    console.error('❌ Erreur correction agressive:', error);
+    return { success: false, hasChanges: false, error: error.message };
+  }
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   selectDirectory: async () => ipcRenderer.invoke('select-directory'),
   onDownloadProgress: (callback) => {
@@ -469,10 +595,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return true;
   },
 
-  // 🆕 FONCTION POUR CORRIGER LA STRUCTURE DES DOSSIERS DE MODS
+  // 🔧 FONCTION POUR CORRIGER LA STRUCTURE DES DOSSIERS DE MODS
   flattenModDirectory: (modPath) => {
     console.log('🔧 Appel flattenModDirectory pour:', modPath);
     return flattenModDirectory(modPath);
+  },
+
+  // ⚡ FONCTION DE CORRECTION AGRESSIVE
+  aggressiveFlattenModDirectory: (modPath) => {
+    console.log('⚡ Appel aggressiveFlattenModDirectory pour:', modPath);
+    return aggressiveFlattenModDirectory(modPath);
   },
 
   // 🆕 NOUVELLES FONCTIONS POUR LES VARIANTES
