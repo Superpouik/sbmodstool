@@ -51,8 +51,8 @@ window.loadSettingsPage = function() {
   header.className = 'settings-header';
   header.innerHTML = `
     <div class="settings-title">
-      <h2 style="margin: 0; color: #82eefd;">⚙️ Settings</h2>
-      <p style="color: #888; margin: 5px 0 0 0;">Configure your folders, API keys and preferences</p>
+      <h2>⚙️ Settings</h2>
+      <p>Configure your folders, API keys and preferences</p>
     </div>
     <div class="settings-stats">
       <span id="configured-count">0</span> sur <span id="total-count">4</span> dossiers configurés
@@ -142,6 +142,42 @@ function createFolderCard(conf) {
     </div>
   `;
 
+  // Applique l'espacement correct pour les icônes
+  setTimeout(() => {
+    // Carte principale - plus d'espace autour
+    card.style.padding = '32px';
+    
+    // Header - espacement harmonisé
+    const header = card.querySelector('.card-header');
+    if (header) {
+      header.style.padding = '0 0 16px 0';
+      header.style.margin = '0';
+    }
+    
+    // Icône - taille et espacement optimisés
+    const icon = card.querySelector('.card-icon');
+    if (icon) {
+      icon.style.margin = '0';
+      icon.style.width = '50px';
+      icon.style.height = '50px';
+      icon.style.flexShrink = '0';
+    }
+    
+    // Contenu - espacement interne
+    const content = card.querySelector('.card-content');
+    if (content) {
+      content.style.padding = '0';
+      content.style.margin = '16px 0';
+    }
+    
+    // Actions - espacement vers le bas
+    const actions = card.querySelector('.card-actions');
+    if (actions) {
+      actions.style.padding = '0';
+      actions.style.marginTop = '16px';
+    }
+  }, 100);
+
   // Event listeners
   const browseBtn = card.querySelector('.browse-btn');
   browseBtn.addEventListener('click', async () => {
@@ -201,6 +237,42 @@ function createApiCard() {
       ${isConfigured ? '<button class="clear-btn" id="clear-api-btn">🗑️ Effacer</button>' : ''}
     </div>
   `;
+
+  // Applique l'espacement correct pour les icônes
+  setTimeout(() => {
+    // Carte principale - plus d'espace autour
+    card.style.padding = '32px';
+    
+    // Header - espacement harmonisé
+    const header = card.querySelector('.card-header');
+    if (header) {
+      header.style.padding = '0 0 16px 0';
+      header.style.margin = '0';
+    }
+    
+    // Icône - taille et espacement optimisés
+    const icon = card.querySelector('.card-icon');
+    if (icon) {
+      icon.style.margin = '0';
+      icon.style.width = '50px';
+      icon.style.height = '50px';
+      icon.style.flexShrink = '0';
+    }
+    
+    // Contenu - espacement interne
+    const content = card.querySelector('.card-content');
+    if (content) {
+      content.style.padding = '0';
+      content.style.margin = '16px 0';
+    }
+    
+    // Actions - espacement vers le bas
+    const actions = card.querySelector('.card-actions');
+    if (actions) {
+      actions.style.padding = '0';
+      actions.style.marginTop = '16px';
+    }
+  }, 100);
 
   // Event listeners
   const input = card.querySelector('#nexus-api-key');
@@ -279,9 +351,45 @@ function createLanguageCard() {
     
     <div class="card-actions">
       <button class="apply-btn" id="apply-language-btn">🔄 Appliquer</button>
-      <button class="restart-btn" id="restart-app-btn" style="display: none;">🚀 restart</button>
+      <button class="restart-btn" id="restart-app-btn">🚀 restart</button>
     </div>
   `;
+
+  // Applique l'espacement correct pour les icônes
+  setTimeout(() => {
+    // Carte principale - plus d'espace autour
+    card.style.padding = '32px';
+    
+    // Header - espacement harmonisé
+    const header = card.querySelector('.card-header');
+    if (header) {
+      header.style.padding = '0 0 16px 0';
+      header.style.margin = '0';
+    }
+    
+    // Icône - taille et espacement optimisés
+    const icon = card.querySelector('.card-icon');
+    if (icon) {
+      icon.style.margin = '0';
+      icon.style.width = '50px';
+      icon.style.height = '50px';
+      icon.style.flexShrink = '0';
+    }
+    
+    // Contenu - espacement interne
+    const content = card.querySelector('.card-content');
+    if (content) {
+      content.style.padding = '0';
+      content.style.margin = '16px 0';
+    }
+    
+    // Actions - espacement vers le bas
+    const actions = card.querySelector('.card-actions');
+    if (actions) {
+      actions.style.padding = '0';
+      actions.style.marginTop = '16px';
+    }
+  }, 100);
 
   // Event listeners
   const select = card.querySelector('#language-select');
@@ -291,10 +399,10 @@ function createLanguageCard() {
   select.addEventListener('change', () => {
     const newLang = select.value;
     if (newLang !== currentLang) {
-      applyBtn.style.background = '#ff6b35';
+      applyBtn.className = 'apply-btn warning';
       applyBtn.textContent = '⚠️ apply changes';
     } else {
-      applyBtn.style.background = '';
+      applyBtn.className = 'apply-btn';
       applyBtn.textContent = '🔄 Apply';
     }
   });
@@ -307,14 +415,14 @@ function createLanguageCard() {
     showNotification(`🌍 Langue changée vers ${selectedLangObj.name} !`);
     
     // Affiche le bouton redémarrer
-    restartBtn.style.display = 'inline-block';
+    restartBtn.className = 'restart-btn visible';
     applyBtn.textContent = '✅ Applyed';
     applyBtn.disabled = true;
     
     // Cache le message d'info et affiche un nouveau
     const infoDiv = card.querySelector('.language-info');
     infoDiv.innerHTML = '🔄 <strong>Restart the application to see the changes</strong>';
-    infoDiv.style.color = '#ff6b35';
+    infoDiv.className = 'language-info warning';
   });
 
   restartBtn.addEventListener('click', () => {
