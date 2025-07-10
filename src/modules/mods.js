@@ -485,17 +485,17 @@ window.loadModsPage = function() {
 
     <!-- Barre de recherche harmonisée -->
     <div class="search-container" style="margin-bottom: 30px; max-width: 500px;">
-      <input type="text" id="mod-search" placeholder="🔍 Rechercher un mod..." />
+      <input type="text" id="mod-search" placeholder="🔍 Search mod..." />
       <button id="clear-search" class="clear-btn" title="Effacer">✕</button>
     </div>
 
     <!-- Sections avec grilles harmonisées -->
     <div class="mods-sections">
-      <!-- Section Mods Actifs -->
+      <!-- Section Enabled Mods -->
       <div class="home-section" id="active-section">
         <div class="section-header">
-          <h3>🟢 Mods Actifs (<span id="active-visible">${activeMods.length}</span>)</h3>
-          <p>Mods actuellement utilisés par le jeu</p>
+          <h3>🟢 Enabled Mods (<span id="active-visible">${activeMods.length}</span>)</h3>
+          <p>Mods currently used by the game</p>
         </div>
         <div class="home-mods-grid" id="active-mods-grid">
           ${activeMods.map(name => createModCard(name, true, modsPath)).join('')}
