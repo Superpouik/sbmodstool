@@ -1,4 +1,4 @@
-// src/modules/multi-variant.js - Gestion des mods modulaires avec sélection multiple
+// src/modules/multi-variant.js - Gestion des mods modulaires avec logique de détection corrigée
 
 console.log('🎭 Module multi-variant.js chargé');
 
@@ -15,8 +15,6 @@ class MultiVariantManager {
       /^(sound|audio|music)$/i,
       /^(compatibility|compat)$/i,
       /^(patch|fix|update)$/i,
-      /^(hd|4k|2k|uhd)$/i,
-      /^(low|med|high|ultra)$/i,
       /^(part\d+|section\d+|component\d+)$/i,
       /^(english|français|deutsch|español)$/i
     ];
@@ -31,28 +29,353 @@ class MultiVariantManager {
       ['2k', '4k', 'hd', 'uhd'],
       ['english', 'français', 'deutsch', 'español', 'french', 'german', 'spanish']
     ];
+
+    // Patterns pour détecter les variantes (noms similaires)
+    this.variantPatterns = [
+      /^(.+?)[\s_-]*(v\d+|version\d+|\d+\.\d+)[\s_-]*(.*)$/i, // Version numbers
+      /^(.+?)[\s_-]*(hd|4k|2k|uhd|sd)[\s_-]*(.*)$/i, // Quality variants
+      /^(.+?)[\s_-]*(alt|alternative|option\d?)[\s_-]*(.*)$/i, // Alternative versions
+      /^(.+?)[\s_-]*(a|b|c|\d)[\s_-]*(.*)$/i, // Simple letter/number variants
+    ];
   }
 
   /**
-   * Détermine si un mod est modulaire et nécessite une sélection multiple
+   * 🆕 Analyse la structure à la racine du mod pour détecter les mods modulaires
+   * (suggestion brillante de l'utilisateur !)
+   * 
+   * Version simplifiée qui n'utilise que les données des variants
+   */
+  analyzeRootStructure(variants) {
+    if (!variants || variants.length === 0) {
+      return { hasRootGameFiles: false, hasSubfolders: false, rootPath: null };
+    }
+
+    console.log('🔍 Analyse structure racine basée sur les variants');
+
+    try {
+      const gameFileExtensions = ['.pak', '.ucas', '.utoc'];
+      
+      // On a forcément des sous-dossiers si on a des variants
+      const hasSubfolders = variants.length > 0;
+      
+      // Vérifie si certains variants ont des noms qui suggèrent une structure racine + modulaire
+      const hasBaseVariant = variants.some(variant => 
+        /^(base|core|main|root|required)$/i.test(variant.name)
+      );
+      
+      // Vérifie si certains variants contiennent des fichiers qui semblent être des "core" files
+      let hasRootGameFiles = hasBaseVariant;
+      
+      // Si pas de variant "base", cherche d'autres indices
+      if (!hasRootGameFiles) {
+        // Cherche des patterns qui suggèrent un mod avec fichiers de base + composants
+        const hasModularPattern = variants.some(variant => 
+          /^(optional|addon|extra|texture|audio|patch|component)$/i.test(variant.name)
+        );
+        
+        // Si on a des patterns modulaires, c'est probable qu'il y ait aussi des fichiers de base
+        if (hasModularPattern && variants.length >= 3) {
+          hasRootGameFiles = true;
+          console.log('📁 Patterns modulaires détectés avec plusieurs variants - probable structure mixte');
+        }
+      }
+
+      console.log('✅ A probable structure racine:', hasRootGameFiles);
+      console.log('📁 A des sous-dossiers (variants):', hasSubfolders);
+      console.log('🎯 Variant de base détecté:', hasBaseVariant);
+
+      const analysis = hasRootGameFiles && hasSubfolders ? 
+        'Structure mixte probable - Mod modulaire' :
+        hasSubfolders ? 'Sous-dossiers seulement - Mod à variantes' :
+        'Structure simple';
+
+      console.log('🧠 Analyse:', analysis);
+
+      return {
+        hasRootGameFiles,
+        hasSubfolders,
+        hasBaseVariant,
+        totalVariants: variants.length,
+        analysis,
+        variantNames: variants.map(v => v.name)
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur analyse structure racine:', error);
+      return {
+        hasRootGameFiles: false,
+        hasSubfolders: false,
+        error: error.message,
+        analysis: 'Erreur lors de l\'analyse'
+      };
+    }
+  }
+
+  /**
+   * 🆕 NOUVELLE LOGIQUE - Détermine si un mod est modulaire ou à variantes
    */
   isModularMod(variants) {
     if (!variants || variants.length < 2) return false;
 
-    // Compte les variants qui correspondent aux patterns modulaires
-    const modularCount = variants.filter(variant => 
-      this.modularPatterns.some(pattern => pattern.test(variant.name))
-    ).length;
+    console.log('🔍 Analyse du type de mod:', variants.map(v => v.name));
 
-    // Si plus de 70% des variants correspondent aux patterns modulaires
-    const modularRatio = modularCount / variants.length;
+    try {
+      // Étape 1: Analyser la similarité des noms de dossiers
+      const namesSimilarity = this.analyzeFolderNamesSimilarity(variants);
+      console.log('📂 Similarité des noms:', namesSimilarity);
+
+      // Étape 2: Analyser les noms des fichiers de jeu
+      const filesSimilarity = this.analyzeGameFilesSimilarity(variants);
+      console.log('📦 Similarité des fichiers:', filesSimilarity);
+
+      // Étape 3: Vérifier les patterns de modularité
+      const modularScore = this.calculateModularScore(variants);
+      console.log('🎯 Score modularité:', modularScore);
+
+      // LOGIQUE DE DÉCISION PRINCIPALE
+      // Si les noms sont très similaires ET les fichiers ont les mêmes noms → Mod à variantes
+      if (namesSimilarity.areSimilar && filesSimilarity.haveSameNames) {
+        console.log('✅ Détecté: Mod à VARIANTES (noms similaires + fichiers identiques)');
+        return false; // → Interface de sélection unique
+      }
+
+      // Si les noms sont similaires mais fichiers différents → Probablement variantes
+      if (namesSimilarity.areSimilar && !filesSimilarity.haveSameNames) {
+        console.log('⚠️ Détecté: Mod à VARIANTES (noms similaires + fichiers différents)');
+        return false; // → Interface de sélection unique
+      }
+
+      // Si les noms sont différents ET fichiers différents → Probablement modulaire
+      if (!namesSimilarity.areSimilar && !filesSimilarity.haveSameNames) {
+        console.log('🎭 Détecté: Mod MODULAIRE (noms différents + fichiers différents)');
+        return true; // → Interface de sélection multiple
+      }
+
+      // CAS LIMITE 1: noms différents + fichiers identiques
+      if (!namesSimilarity.areSimilar && filesSimilarity.haveSameNames) {
+        console.log('🤔 Cas limite: noms différents + fichiers identiques');
+        
+        // Utilise le score de modularité pour trancher
+        if (modularScore.score >= 0.6) {
+          console.log('🎭 Décision: Mod MODULAIRE (score élevé)');
+          return true;
+        } else {
+          console.log('✅ Décision: Mod à VARIANTES (score faible)');
+          return false;
+        }
+      }
+
+      // 🆕 CAS LIMITE 2: Analyse de la structure à la racine (NOUVELLE LOGIQUE)
+      console.log('🔍 Cas ambigu détecté - Analyse de la structure à la racine...');
+      const rootStructure = this.analyzeRootStructure(variants);
+      console.log('📁 Structure racine:', rootStructure);
+
+      if (rootStructure.hasRootGameFiles && rootStructure.hasSubfolders) {
+        console.log('🎭 Détecté: Mod MODULAIRE (fichiers à la racine + sous-dossiers = structure mixte)');
+        return true; // → Interface de sélection multiple
+      }
+
+      // Fallback: utilise l'ancienne logique si rien ne matche
+      console.log('🔄 Fallback vers logique patterns (score:', modularScore.score, ')');
+      
+      if (modularScore.score >= 0.5) {
+        console.log('🎭 Fallback: Mod MODULAIRE');
+        return true;
+      } else {
+        console.log('✅ Fallback: Mod à VARIANTES');
+        return false;
+      }
+
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'analyse du type de mod:', error);
+      console.log('🔄 Fallback sécurisé vers mod à variantes');
+      return false; // Fallback sécurisé vers l'interface simple
+    }
+  }
+
+  /**
+   * 🆕 Analyse la similarité des noms de dossiers
+   */
+  analyzeFolderNamesSimilarity(variants) {
+    const names = variants.map(v => v.name.toLowerCase());
+    
+    // Compte les paires similaires
+    let similarPairs = 0;
+    let totalPairs = 0;
+
+    for (let i = 0; i < names.length; i++) {
+      for (let j = i + 1; j < names.length; j++) {
+        totalPairs++;
+        
+        const name1 = names[i];
+        const name2 = names[j];
+        
+        // Vérifie si les noms correspondent aux patterns de variantes
+        if (this.areVariantNames(name1, name2)) {
+          similarPairs++;
+        }
+      }
+    }
+
+    const similarityRatio = totalPairs > 0 ? similarPairs / totalPairs : 0;
+    const areSimilar = similarityRatio >= 0.5; // Au moins 50% des paires sont similaires
+
+    return {
+      areSimilar,
+      similarityRatio,
+      similarPairs,
+      totalPairs,
+      names
+    };
+  }
+
+  /**
+   * 🆕 Vérifie si deux noms sont des variantes l'un de l'autre
+   */
+  areVariantNames(name1, name2) {
+    // Retire les espaces, tirets et underscores pour la comparaison
+    const clean1 = name1.replace(/[\s_-]+/g, '');
+    const clean2 = name2.replace(/[\s_-]+/g, '');
+    
+    // Si les noms nettoyés sont identiques, c'est probablement des variantes
+    if (clean1 === clean2) return true;
+
+    // Calcule la distance de Levenshtein normalisée
+    const distance = this.levenshteinDistance(clean1, clean2);
+    const maxLength = Math.max(clean1.length, clean2.length);
+    const similarity = maxLength > 0 ? 1 - (distance / maxLength) : 1;
+
+    // Considère similaire si au moins 70% de similarité
+    if (similarity >= 0.7) return true;
+
+    // Vérifie les patterns de variantes
+    for (const pattern of this.variantPatterns) {
+      const match1 = name1.match(pattern);
+      const match2 = name2.match(pattern);
+      
+      if (match1 && match2) {
+        // Compare les parties principales (groupe 1 et 3)
+        const base1 = (match1[1] + match1[3]).toLowerCase().trim();
+        const base2 = (match2[1] + match2[3]).toLowerCase().trim();
+        
+        if (base1 === base2 || this.levenshteinDistance(base1, base2) <= 2) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * 🆕 Calcule la distance de Levenshtein entre deux chaînes
+   */
+  levenshteinDistance(str1, str2) {
+    const matrix = [];
+    
+    for (let i = 0; i <= str2.length; i++) {
+      matrix[i] = [i];
+    }
+    
+    for (let j = 0; j <= str1.length; j++) {
+      matrix[0][j] = j;
+    }
+    
+    for (let i = 1; i <= str2.length; i++) {
+      for (let j = 1; j <= str1.length; j++) {
+        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1, // substitution
+            matrix[i][j - 1] + 1, // insertion
+            matrix[i - 1][j] + 1 // deletion
+          );
+        }
+      }
+    }
+    
+    return matrix[str2.length][str1.length];
+  }
+
+  /**
+   * 🆕 Analyse si les fichiers de jeu ont les mêmes noms
+   */
+  analyzeGameFilesSimilarity(variants) {
+    // Extrait les noms de fichiers de jeu (sans extension et sans chemin)
+    const variantFileNames = variants.map(variant => {
+      const fileNames = variant.files.map(filePath => {
+        const fileName = filePath.split(/[/\\]/).pop(); // Récupère le nom de fichier
+        return fileName.replace(/\.(pak|ucas|utoc)$/i, ''); // Retire l'extension
+      });
+      return new Set(fileNames); // Utilise un Set pour éviter les doublons
+    });
+
+    if (variantFileNames.length === 0) {
+      return { haveSameNames: false, commonFiles: [], uniqueFiles: [] };
+    }
+
+    // Trouve les fichiers communs à tous les variants
+    let commonFiles = new Set(variantFileNames[0]);
+    for (let i = 1; i < variantFileNames.length; i++) {
+      commonFiles = new Set([...commonFiles].filter(file => variantFileNames[i].has(file)));
+    }
+
+    // Trouve les fichiers uniques
+    const allFiles = new Set();
+    variantFileNames.forEach(fileSet => {
+      fileSet.forEach(file => allFiles.add(file));
+    });
+    
+    const uniqueFiles = [...allFiles].filter(file => !commonFiles.has(file));
+
+    // Calcule le ratio de fichiers communs
+    const totalUniqueFiles = allFiles.size;
+    const commonRatio = totalUniqueFiles > 0 ? commonFiles.size / totalUniqueFiles : 0;
+
+    // Considère que les fichiers ont les mêmes noms si au moins 80% sont communs
+    const haveSameNames = commonRatio >= 0.8;
+
+    return {
+      haveSameNames,
+      commonFiles: [...commonFiles],
+      uniqueFiles,
+      commonRatio,
+      totalFiles: totalUniqueFiles,
+      variantFileNames: variantFileNames.map(set => [...set])
+    };
+  }
+
+  /**
+   * 🆕 Calcule un score de modularité basé sur les patterns
+   */
+  calculateModularScore(variants) {
+    let modularCount = 0;
+    let totalVariants = variants.length;
+
+    const details = variants.map(variant => {
+      const isModular = this.modularPatterns.some(pattern => pattern.test(variant.name));
+      if (isModular) modularCount++;
+      
+      return {
+        name: variant.name,
+        isModular,
+        matchedPatterns: this.modularPatterns.filter(pattern => pattern.test(variant.name))
+      };
+    });
+
+    const score = totalVariants > 0 ? modularCount / totalVariants : 0;
     const hasRequiredComponent = variants.some(variant =>
       this.requiredPatterns.some(pattern => pattern.test(variant.name))
     );
 
-    console.log(`🔍 Analyse modularité: ${modularCount}/${variants.length} (${Math.round(modularRatio * 100)}%) - Requis: ${hasRequiredComponent}`);
-
-    return modularRatio >= 0.6 || hasRequiredComponent || variants.length >= 4;
+    return {
+      score,
+      modularCount,
+      totalVariants,
+      hasRequiredComponent,
+      details
+    };
   }
 
   /**
@@ -641,7 +964,7 @@ window.showModVariantSelector = function(modPath, variants, callback) {
     console.log('🎭 Mod modulaire détecté - Interface multi-sélection');
     manager.showMultiVariantSelector(modPath, variants, callback);
   } else {
-    console.log('🎯 Mod standard - Interface sélection unique');
+    console.log('🎯 Mod à variantes détecté - Interface sélection unique');
     // Utilise l'ancien système pour les mods simples
     if (window.Popup && typeof window.Popup.askModVariant === 'function') {
       window.Popup.askModVariant(modPath, variants, callback);
@@ -652,7 +975,7 @@ window.showModVariantSelector = function(modPath, variants, callback) {
   }
 };
 
-console.log('✅ Multi-Variant Manager initialisé');
+console.log('✅ Multi-Variant Manager initialisé avec logique de détection corrigée');
 
 // Export pour utilisation globale
 if (typeof module !== 'undefined' && module.exports) {
