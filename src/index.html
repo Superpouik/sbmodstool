@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stellar Blade Mod Manager</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="container">
+    <aside id="sidebar">
+      <h1>🚀 Stellar Blade</h1>
+      <ul id="menu">
+        <li data-tab="home" class="active">🏡 Home</li>
+        <li data-tab="nexus">💠 Nexus</li>
+        <li data-tab="mods">🗂️ Manager</li>
+        <li data-tab="ayaka">💠 Ayaka</li>
+        <li data-tab="settings">⚙️ settings</li>
+      </ul>
+      <!-- Bouton Launch en bas de la sidebar -->
+      <div id="launch-section">
+        <button id="launch-game" class="launch-btn">
+          <span class="launch-icon">🎮</span>
+          <span class="launch-text">Launch Stellar Blade</span>
+        </button>
+      </div>
+    </aside>
+    <main id="main-content">
+      <section id="tab-home" class="tab active">
+      <div id="home-webview"></div>
+      </section>
+      <section id="tab-nexus" class="tab">
+        <h2>🏠 Nexus Mods</h2>
+        <div id="nexus-content"></div>
+      </section>
+      <section id="tab-mods" class="tab">
+        <h2>🗂️ installed mods</h2>
+        <div id="mods-content"></div>
+      </section>
+      <section id="tab-ayaka" class="tab">
+        <h2>💠 Ayaka Mods</h2>
+        <div id="ayaka-webview"></div>
+      </section>
+      <section id="tab-settings" class="tab">
+        <h2>⚙️ settings</h2>
+        <div id="settings-content"></div>
+      </section>
+    </main>
+  </div>
+  
+  <!-- 🆕 ORDRE CRITIQUE : popup.js DOIT être chargé en PREMIER -->
+  <script src="modules/popup.js"></script>
+  
+  <!-- 🆕 NOUVEAU MODULE - Multi-Variant Manager -->
+  <script src="modules/multi-variant.js"></script>
+  
+  <!-- Scripts principaux -->
+  <script src="index.js"></script>
+  <script src="modules/home.js"></script>
+  <script src="modules/nexus.js"></script>
+  <script src="modules/ayaka.js"></script>
+  <script src="modules/settings.js"></script>
+  <script src="modules/mods.js"></script>
+  <script src="modules/launcher.js"></script>
+  <!-- Menu contextuel images -->
+  <script src="modules/image-context.js"></script>
+  <script src="modules/debug-notes.js"></script>
+  
+  <div id="notification" class="hidden"></div>
+  
+  <!-- Script de debug -->
+  <script>
+    console.log('🔧 Index.html chargé, vérification des composants...');
+    console.log('📝 Popup disponible:', typeof window.Popup);
+    console.log('🗂️ ModNotesManager disponible:', typeof window.ModNotesManager);
+    console.log('🎭 MultiVariantManager disponible:', typeof window.MultiVariantManager);
+    
+    // Test rapide
+    setTimeout(() => {
+      if (window.Popup && window.Popup.askNote) {
+        console.log('✅ Système de notes prêt !');
+      } else {
+        console.error('❌ Système de notes non disponible !');
+      }
+      
+      if (window.MultiVariantManager) {
+        console.log('✅ Système multi-variants prêt !');
+      } else {
+        console.error('❌ Système multi-variants non disponible !');
+      }
+    }, 1000);
+  </script>
+</body>
+</html>
