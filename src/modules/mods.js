@@ -1721,8 +1721,8 @@ window.loadModsPage = function() {
           
           <!-- 🆕 Badge Nexus Link -->
           ${hasNexusLink ? `
-            <div class="mod-nexus-badge clickable" title="Open Nexus page: ${nexusLink.url}" data-mod="${modName}" data-url="${nexusLink.url}">
-              🌐
+            <div class="mod-nexus-badge clickable" title="Open in Nexus tab: ${nexusLink.url}" data-mod="${modName}" data-url="${nexusLink.url}">
+              🔗
             </div>
           ` : ''}
         </div>
@@ -1918,7 +1918,7 @@ window.loadModsPage = function() {
         position: absolute;
         bottom: 8px;
         right: 8px;
-        background: rgba(0, 100, 200, 0.9);
+        background: rgba(72, 255, 211, 0.9);
         color: white;
         padding: 6px 8px;
         border-radius: 8px;
@@ -1927,25 +1927,26 @@ window.loadModsPage = function() {
         align-items: center;
         justify-content: center;
         backdrop-filter: blur(8px);
-        border: 1px solid rgba(100, 150, 255, 0.6);
+        border: 1px solid rgba(72, 255, 211, 0.6);
         cursor: pointer;
         user-select: none;
         transition: all 0.2s ease;
         width: 28px;
         height: 28px;
-        box-shadow: 0 2px 8px rgba(0, 100, 200, 0.4);
+        box-shadow: 0 2px 8px rgba(72, 255, 211, 0.4);
       }
       
       .mod-nexus-badge:hover {
-        background: rgba(0, 120, 255, 1);
+        background: rgba(72, 255, 211, 1);
         transform: translateY(-1px) scale(1.05);
-        box-shadow: 0 4px 12px rgba(0, 120, 255, 0.6);
-        border-color: rgba(100, 150, 255, 0.8);
+        box-shadow: 0 4px 12px rgba(72, 255, 211, 0.6);
+        border-color: rgba(72, 255, 211, 0.8);
+        text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
       }
       
       .mod-nexus-badge:active {
         transform: translateY(0) scale(1);
-        box-shadow: 0 2px 6px rgba(0, 100, 200, 0.4);
+        box-shadow: 0 2px 6px rgba(72, 255, 211, 0.4);
       }
       
       .status-dot {
@@ -2354,13 +2355,46 @@ function setupNexusBadgeHandlers() {
       e.preventDefault();
       
       const url = badge.getAttribute('data-url');
-      console.log('🌐 Nexus badge clicked, opening:', url);
+      const modName = badge.getAttribute('data-mod');
+      console.log('🔗 Nexus badge clicked for', modName, ', opening in Nexus tab:', url);
       
-      // Ouvre l'URL dans le navigateur externe
-      if (window.electronAPI && window.electronAPI.openExternal) {
-        window.electronAPI.openExternal(url);
-      } else {
-        window.open(url, '_blank');
+      // Navigue vers l'onglet Nexus
+      document.querySelectorAll('#menu li').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+      
+      const nexusTab = document.querySelector('#menu li[data-tab="nexus"]');
+      const nexusContent = document.querySelector('#tab-nexus');
+      
+      if (nexusTab && nexusContent) {
+        nexusTab.classList.add('active');
+        nexusContent.classList.add('active');
+        
+        // Stocke l'URL pour le chargement dans Nexus
+        window.lastNexusUrl = url;
+        
+        // Charge la webview Nexus avec l'URL spécifique
+        if (window.loadNexusWebview) {
+          // Modifie temporairement la fonction pour accepter une URL complète
+          window.loadNexusWebviewWithUrl = function(customUrl) {
+            const nexusDiv = document.getElementById('nexus-content');
+            nexusDiv.innerHTML = '';
+            
+            const webview = document.createElement('webview');
+            webview.src = customUrl;
+            webview.style.width = '100%';
+            webview.style.height = '900px';
+            webview.setAttribute('allowpopups', '');
+            webview.setAttribute('webpreferences', 'nodeIntegration=no,contextIsolation=yes');
+            webview.id = 'nexus-webview';
+            
+            nexusDiv.appendChild(webview);
+            console.log('✅ Nexus webview loaded with custom URL:', customUrl);
+          };
+          
+          window.loadNexusWebviewWithUrl(url);
+        }
+        
+        showNotification(`🔗 Opening "${modName}" in Nexus tab`);
       }
     });
   });
